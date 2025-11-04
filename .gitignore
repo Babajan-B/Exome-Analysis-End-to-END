@@ -1,0 +1,90 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Flask
+instance/
+.webassets-cache
+
+# Environment variables
+.env
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+uploads/
+results/
+*.bam
+*.bai
+*.sam
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.vcf
+*.vcf.gz
+*.log
+
+# Reference genomes (large files) - ALL EXCLUDED
+reference/*.fa
+reference/*.fasta
+reference/*.fa.gz
+reference/*.fasta.gz
+reference/*.bwt
+reference/*.pac
+reference/*.sa
+hg19.fa.gz
+hg38.fa.gz
+*.fa.gz
+
+# Keep only small index and dict files
+!reference/*.fai
+!reference/*.dict
+!reference/*.amb
+!reference/*.ann
+
+# GATK - exclude large JAR files
+gatk-*.zip
+gatk-*/*.jar
+**/gatk-package-*.jar
+
+# Tools
+tools/igv/IGV_*/
+tools/*.jar
+tools/snpEff/*.jar
+
+# Test data
+test_data/*.fastq
+test_data/*.fastq.gz
+test_data/*.bam
+test_data/*.vcf
+
+# Backup
+backup/
+
+# snpEff data
+tools/snpEff/data/*/
+
+# Large genome files
+*.fa.gz
+*.fasta.gz
+

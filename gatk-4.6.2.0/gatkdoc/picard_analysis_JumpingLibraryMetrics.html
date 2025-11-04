@@ -1,0 +1,137 @@
+<?php
+
+    include '../../../common/include/common.php';
+    include_once '../../config.php';
+    $module = modules::GATK;
+    printHeader($module, $name, topSN::guide);
+?>
+
+<link type='text/css' rel='stylesheet' href='gatkDoc.css'>
+
+<div class='row-fluid' id="top">
+
+	
+	<?php $group = 'Metrics'; ?>
+
+	<section class="span4">
+		<aside class="well">
+			<a href="index.html"><h4><i class='fa fa-chevron-left'></i> Back to Tool Docs Index</h4></a>
+		</aside>
+		<?php getForumPosts( 'JumpingLibraryMetrics' ) ?>
+
+	</section>
+
+	<div class="span8">
+
+		<h1>JumpingLibraryMetrics</h1>
+
+		<p class="lead">Metrics</p>
+
+			<h3>Category
+				<small> Metrics</small>
+			</h3>
+		<hr>
+		<h2>Overview</h2>
+		High level metrics about the presence of  outward- and inward-facing pairs
+ within a SAM file generated with a jumping library, produced by
+ the CollectJumpingLibraryMetrics program and usually stored in a file with
+ the extension ".jump_metrics".
+
+				<p>This table summarizes the values that are specific to this metric.</p>
+				<table class="table table-striped table-bordered table-condensed">
+					<thead>
+					<tr>
+						<th>Metric</th>
+						<th>Summary</th>
+					</tr>
+					</thead>
+					<tr>
+						<td>JUMP_PAIRS<br />
+						<td>The number of outward-facing pairs in the SAM file</td>
+					</tr>
+					<tr>
+						<td>JUMP_DUPLICATE_PAIRS<br />
+						<td>The number of outward-facing pairs that are duplicates</td>
+					</tr>
+					<tr>
+						<td>JUMP_DUPLICATE_PCT<br />
+						<td>The fraction of outward-facing pairs that are marked as duplicates</td>
+					</tr>
+					<tr>
+						<td>JUMP_LIBRARY_SIZE<br />
+						<td>The estimated library size for outward-facing pairs</td>
+					</tr>
+					<tr>
+						<td>JUMP_MEAN_INSERT_SIZE<br />
+						<td>The mean insert size for outward-facing pairs</td>
+					</tr>
+					<tr>
+						<td>JUMP_STDEV_INSERT_SIZE<br />
+						<td>The standard deviation on the insert size for outward-facing pairs</td>
+					</tr>
+					<tr>
+						<td>NONJUMP_PAIRS<br />
+						<td>The number of inward-facing pairs in the SAM file</td>
+					</tr>
+					<tr>
+						<td>NONJUMP_DUPLICATE_PAIRS<br />
+						<td>The number of inward-facing pais that are duplicates</td>
+					</tr>
+					<tr>
+						<td>NONJUMP_DUPLICATE_PCT<br />
+						<td>The fraction of inward-facing pairs that are marked as duplicates</td>
+					</tr>
+					<tr>
+						<td>NONJUMP_LIBRARY_SIZE<br />
+						<td>The estimated library size for inward-facing pairs</td>
+					</tr>
+					<tr>
+						<td>NONJUMP_MEAN_INSERT_SIZE<br />
+						<td>The mean insert size for inward-facing pairs</td>
+					</tr>
+					<tr>
+						<td>NONJUMP_STDEV_INSERT_SIZE<br />
+						<td>The standard deviation on the insert size for inward-facing pairs</td>
+					</tr>
+					<tr>
+						<td>CHIMERIC_PAIRS<br />
+						<td>The number of pairs where either (a) the ends fall on different chromosomes or (b) the insert size
+ is greater than the maximum of 100000 or 2 times the mode of the insert size for outward-facing pairs.</td>
+					</tr>
+					<tr>
+						<td>FRAGMENTS<br />
+						<td>The number of fragments in the SAM file</td>
+					</tr>
+					<tr>
+						<td>PCT_JUMPS<br />
+						<td>The number of outward-facing pairs expressed as a fraction of the total of all outward facing pairs,
+ inward-facing pairs, and chimeric pairs.</td>
+					</tr>
+					<tr>
+						<td>PCT_NONJUMPS<br />
+						<td>The number of inward-facing pairs expressed as a fraction of the total of all outward facing pairs,
+ inward-facing pairs, and chimeric pairs.</td>
+					</tr>
+					<tr>
+						<td>PCT_CHIMERAS<br />
+						<td>The number of chimeric pairs expressed as a fraction of the total of all outward facing pairs,
+ inward-facing pairs, and chimeric pairs.</td>
+					</tr>
+					</tbody>
+				</table>
+
+        <hr>
+        <p><a href='#top'><i class='fa fa-chevron-up'></i> Return to top</a></p>
+        <hr>
+        <p class="see-also">See also 
+        	<a href="https://software.broadinstitute.org/gatk/documentation/">General Documentation</a> |
+        	<a class="hide_me_php" href="index.html">Tool Docs Index</a> <a class="hide_me_html" href="index">Tool Documentation Index</a> |
+        	<a href="https://gatkforums.broadinstitute.org/gatk/">Support Forum</a>
+        </p>
+
+        <p class="version">GATK version 4.6.2.0 built at Sun, 13 Apr 2025 13:21:43 -0400.
+        </p>
+
+	</div>
+
+	<?php printFooter($module); ?>

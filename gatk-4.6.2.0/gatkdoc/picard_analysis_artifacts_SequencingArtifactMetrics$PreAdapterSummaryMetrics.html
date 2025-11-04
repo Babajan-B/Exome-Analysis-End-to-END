@@ -1,0 +1,128 @@
+<?php
+
+    include '../../../common/include/common.php';
+    include_once '../../config.php';
+    $module = modules::GATK;
+    printHeader($module, $name, topSN::guide);
+?>
+
+<link type='text/css' rel='stylesheet' href='gatkDoc.css'>
+
+<div class='row-fluid' id="top">
+
+	
+	<?php $group = 'Metrics'; ?>
+
+	<section class="span4">
+		<aside class="well">
+			<a href="index.html"><h4><i class='fa fa-chevron-left'></i> Back to Tool Docs Index</h4></a>
+		</aside>
+		<?php getForumPosts( 'PreAdapterSummaryMetrics' ) ?>
+
+	</section>
+
+	<div class="span8">
+
+		<h1>PreAdapterSummaryMetrics</h1>
+
+		<p class="lead">Metrics</p>
+
+			<h3>Category
+				<small> Metrics</small>
+			</h3>
+		<hr>
+		<h2>Overview</h2>
+		Summary analysis of a single pre-adapter artifact.
+
+ These artifacts occur on the original template strand, before the addition of adapters,
+ so they correlate with read number / orientation in a specific way.
+
+ For example, the well-known "Oxo-G" artifact occurs when a G on the template
+ strand is oxidized, giving it an affinity for binding to A rather than the usual C.
+ Thus PCR will introduce apparent G>T substitutions in read 1 and C>A in read 2.
+ In the resulting alignments, a given G>T or C>A observation could either be:
+
+ 1. a true mutation
+ 2. an OxoG artifact
+ 3. some other kind of artifact
+
+ On average, we assume that 1 and 3 will not display this read number / orientation bias, so
+ their contributions will cancel out in the calculation.
+
+				<p>This table summarizes the values that are specific to this metric.</p>
+				<table class="table table-striped table-bordered table-condensed">
+					<thead>
+					<tr>
+						<th>Metric</th>
+						<th>Summary</th>
+					</tr>
+					</thead>
+					<tr>
+						<td>SAMPLE_ALIAS<br />
+						<td>The name of the sample being assayed.</td>
+					</tr>
+					<tr>
+						<td>LIBRARY<br />
+						<td>The name of the library being assayed.</td>
+					</tr>
+					<tr>
+						<td>REF_BASE<br />
+						<td>The (upper-case) original base on the reference strand.</td>
+					</tr>
+					<tr>
+						<td>ALT_BASE<br />
+						<td>The (upper-case) alternative base that is called as a result of DNA damage.</td>
+					</tr>
+					<tr>
+						<td>TOTAL_QSCORE<br />
+						<td>The total Phred-scaled Q-score for this artifact. A lower Q-score
+ means a higher probability that a REF_BASE:ALT_BASE observation
+ randomly picked from the data will be due to this artifact, rather
+ than a true variant.</td>
+					</tr>
+					<tr>
+						<td>WORST_CXT<br />
+						<td>The sequence context (reference bases surrounding the locus of interest) having the lowest Q-score among all contexts for this artifact.</td>
+					</tr>
+					<tr>
+						<td>WORST_CXT_QSCORE<br />
+						<td>The Q-score for the worst context.</td>
+					</tr>
+					<tr>
+						<td>WORST_PRE_CXT<br />
+						<td>The pre-context (reference bases leading up to the locus of interest) with the lowest Q-score.</td>
+					</tr>
+					<tr>
+						<td>WORST_PRE_CXT_QSCORE<br />
+						<td>The Q-score for the worst pre-context.</td>
+					</tr>
+					<tr>
+						<td>WORST_POST_CXT<br />
+						<td>The post-context (reference bases trailing after the locus of interest) with the lowest Q-score.</td>
+					</tr>
+					<tr>
+						<td>WORST_POST_CXT_QSCORE<br />
+						<td>The Q-score for the worst post-context.</td>
+					</tr>
+					<tr>
+						<td>ARTIFACT_NAME<br />
+						<td>A "nickname" of this artifact, if it is a known error mode.</td>
+					</tr>
+					</tbody>
+				</table>
+
+        <hr>
+        <p><a href='#top'><i class='fa fa-chevron-up'></i> Return to top</a></p>
+        <hr>
+        <p class="see-also">See also 
+        	<a href="https://software.broadinstitute.org/gatk/documentation/">General Documentation</a> |
+        	<a class="hide_me_php" href="index.html">Tool Docs Index</a> <a class="hide_me_html" href="index">Tool Documentation Index</a> |
+        	<a href="https://gatkforums.broadinstitute.org/gatk/">Support Forum</a>
+        </p>
+
+        <p class="version">GATK version 4.6.2.0 built at Sun, 13 Apr 2025 13:21:43 -0400.
+        </p>
+
+	</div>
+
+	<?php printFooter($module); ?>

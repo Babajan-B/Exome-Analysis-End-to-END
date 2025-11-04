@@ -1,0 +1,118 @@
+<?php
+
+    include '../../../common/include/common.php';
+    include_once '../../config.php';
+    $module = modules::GATK;
+    printHeader($module, $name, topSN::guide);
+?>
+
+<link type='text/css' rel='stylesheet' href='gatkDoc.css'>
+
+<div class='row-fluid' id="top">
+
+	
+	<?php $group = 'Metrics'; ?>
+
+	<section class="span4">
+		<aside class="well">
+			<a href="index.html"><h4><i class='fa fa-chevron-left'></i> Back to Tool Docs Index</h4></a>
+		</aside>
+		<?php getForumPosts( 'MendelianViolationMetrics' ) ?>
+
+	</section>
+
+	<div class="span8">
+
+		<h1>MendelianViolationMetrics</h1>
+
+		<p class="lead">Metrics</p>
+
+			<h3>Category
+				<small> Metrics</small>
+			</h3>
+		<hr>
+		<h2>Overview</h2>
+		Describes the type and number of mendelian violations found within a Trio.
+
+				<p>This table summarizes the values that are specific to this metric.</p>
+				<table class="table table-striped table-bordered table-condensed">
+					<thead>
+					<tr>
+						<th>Metric</th>
+						<th>Summary</th>
+					</tr>
+					</thead>
+					<tr>
+						<td>FAMILY_ID<br />
+						<td>The family ID assigned to the trio for which these metrics are calculated.</td>
+					</tr>
+					<tr>
+						<td>MOTHER<br />
+						<td>The ID of the mother within the trio.</td>
+					</tr>
+					<tr>
+						<td>FATHER<br />
+						<td>The ID of the father within the trio.</td>
+					</tr>
+					<tr>
+						<td>OFFSPRING<br />
+						<td>The ID of the offspring within the trio.</td>
+					</tr>
+					<tr>
+						<td>OFFSPRING_SEX<br />
+						<td>The sex of the offspring.</td>
+					</tr>
+					<tr>
+						<td>NUM_VARIANT_SITES<br />
+						<td>The number of biallelic, SNP sites at which all relevant samples exceeded the minimum genotype quality and depth and at least one of the samples was variant.</td>
+					</tr>
+					<tr>
+						<td>NUM_DIPLOID_DENOVO<br />
+						<td>The number of diploid sites at which a potential de-novo mutation was observed (i.e. both parents are hom-ref, offspring is not hom-ref.</td>
+					</tr>
+					<tr>
+						<td>NUM_HOMVAR_HOMVAR_HET<br />
+						<td>The number of sites at which both parents are homozygous for a non-reference allele and the offspring is heterozygous.</td>
+					</tr>
+					<tr>
+						<td>NUM_HOMREF_HOMVAR_HOM<br />
+						<td>The number of sites at which the one parent is homozygous reference, the other homozygous variant and the offspring is homozygous.</td>
+					</tr>
+					<tr>
+						<td>NUM_HOM_HET_HOM<br />
+						<td>The number of sites at which one parent is homozygous, the other is heterozygous and the offspring is the alternative homozygote.</td>
+					</tr>
+					<tr>
+						<td>NUM_HAPLOID_DENOVO<br />
+						<td>The number of sites at which the offspring is haploid, the parent is homozygous reference and the offspring is non-reference.</td>
+					</tr>
+					<tr>
+						<td>NUM_HAPLOID_OTHER<br />
+						<td>The number of sites at which the offspring is haploid and exhibits a reference allele that is not present in the parent.</td>
+					</tr>
+					<tr>
+						<td>NUM_OTHER<br />
+						<td>The number of otherwise unclassified events.</td>
+					</tr>
+					<tr>
+						<td>TOTAL_MENDELIAN_VIOLATIONS<br />
+						<td>The total of all mendelian violations observed.</td>
+					</tr>
+					</tbody>
+				</table>
+
+        <hr>
+        <p><a href='#top'><i class='fa fa-chevron-up'></i> Return to top</a></p>
+        <hr>
+        <p class="see-also">See also 
+        	<a href="https://software.broadinstitute.org/gatk/documentation/">General Documentation</a> |
+        	<a class="hide_me_php" href="index.html">Tool Docs Index</a> <a class="hide_me_html" href="index">Tool Documentation Index</a> |
+        	<a href="https://gatkforums.broadinstitute.org/gatk/">Support Forum</a>
+        </p>
+
+        <p class="version">GATK version 4.6.2.0 built at Sun, 13 Apr 2025 13:21:43 -0400.
+        </p>
+
+	</div>
+
+	<?php printFooter($module); ?>

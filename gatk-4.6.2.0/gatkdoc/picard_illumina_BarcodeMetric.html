@@ -1,0 +1,135 @@
+<?php
+
+    include '../../../common/include/common.php';
+    include_once '../../config.php';
+    $module = modules::GATK;
+    printHeader($module, $name, topSN::guide);
+?>
+
+<link type='text/css' rel='stylesheet' href='gatkDoc.css'>
+
+<div class='row-fluid' id="top">
+
+	
+	<?php $group = 'Metrics'; ?>
+
+	<section class="span4">
+		<aside class="well">
+			<a href="index.html"><h4><i class='fa fa-chevron-left'></i> Back to Tool Docs Index</h4></a>
+		</aside>
+		<?php getForumPosts( 'BarcodeMetric' ) ?>
+
+	</section>
+
+	<div class="span8">
+
+		<h1>BarcodeMetric</h1>
+
+		<p class="lead">Metrics</p>
+
+			<h3>Category
+				<small> Metrics</small>
+			</h3>
+		<hr>
+		<h2>Overview</h2>
+		Metrics produced by the ExtractIlluminaBarcodes program that is used to parse data in
+ the basecalls directory and determine to which barcode each read should be assigned.
+
+				<p>This table summarizes the values that are specific to this metric.</p>
+				<table class="table table-striped table-bordered table-condensed">
+					<thead>
+					<tr>
+						<th>Metric</th>
+						<th>Summary</th>
+					</tr>
+					</thead>
+					<tr>
+						<td>BARCODE<br />
+						<td>The barcode (from the set of expected barcodes) for which the following metrics apply.
+ Note that the "symbolic" barcode of NNNNNN is used to report metrics for all reads that
+ do not match a barcode.</td>
+					</tr>
+					<tr>
+						<td>BARCODE_WITHOUT_DELIMITER<br />
+						<td></td>
+					</tr>
+					<tr>
+						<td>BARCODE_NAME<br />
+						<td>The barcode name.</td>
+					</tr>
+					<tr>
+						<td>LIBRARY_NAME<br />
+						<td>The name of the library</td>
+					</tr>
+					<tr>
+						<td>READS<br />
+						<td>The total number of reads matching the barcode.</td>
+					</tr>
+					<tr>
+						<td>PF_READS<br />
+						<td>The number of PF reads matching this barcode (always less than or equal to READS).</td>
+					</tr>
+					<tr>
+						<td>PERFECT_MATCHES<br />
+						<td>The number of all reads matching this barcode that matched with 0 errors or no-calls.</td>
+					</tr>
+					<tr>
+						<td>PF_PERFECT_MATCHES<br />
+						<td>The number of PF reads matching this barcode that matched with 0 errors or no-calls.</td>
+					</tr>
+					<tr>
+						<td>ONE_MISMATCH_MATCHES<br />
+						<td>The number of all reads matching this barcode that matched with 1 error or no-call.</td>
+					</tr>
+					<tr>
+						<td>PF_ONE_MISMATCH_MATCHES<br />
+						<td>The number of PF reads matching this barcode that matched with 1 error or no-call.</td>
+					</tr>
+					<tr>
+						<td>PCT_MATCHES<br />
+						<td>The fraction of all reads in the lane that matched to this barcode.</td>
+					</tr>
+					<tr>
+						<td>RATIO_THIS_BARCODE_TO_BEST_BARCODE_PCT<br />
+						<td>The rate of all reads matching this barcode to all reads matching the most prevalent barcode. For the
+ most prevalent barcode this will be 1, for all others it will be less than 1 (except for the possible
+ exception of when there are more orphan reads than for any other barcode, in which case the value
+ may be arbitrarily large).  One over the lowest number in this column gives you the fold-difference
+ in representation between barcodes.</td>
+					</tr>
+					<tr>
+						<td>PF_PCT_MATCHES<br />
+						<td>The fraction of PF reads in the lane that matched to this barcode.</td>
+					</tr>
+					<tr>
+						<td>PF_RATIO_THIS_BARCODE_TO_BEST_BARCODE_PCT<br />
+						<td>The rate of PF reads matching this barcode to PF reads matching the most prevalent barcode. For the
+ most prevalent barcode this will be 1, for all others it will be less than 1 (except for the possible
+ exception of when there are more orphan reads than for any other barcode, in which case the value
+ may be arbitrarily large).  One over the lowest number in this column gives you the fold-difference
+ in representation of PF reads between barcodes.</td>
+					</tr>
+					<tr>
+						<td>PF_NORMALIZED_MATCHES<br />
+						<td>The "normalized" matches to each barcode. This is calculated as the number of pf reads matching
+ this barcode over the sum of all pf reads matching any barcode (excluding orphans). If all barcodes
+ are represented equally this will be 1.</td>
+					</tr>
+					</tbody>
+				</table>
+
+        <hr>
+        <p><a href='#top'><i class='fa fa-chevron-up'></i> Return to top</a></p>
+        <hr>
+        <p class="see-also">See also 
+        	<a href="https://software.broadinstitute.org/gatk/documentation/">General Documentation</a> |
+        	<a class="hide_me_php" href="index.html">Tool Docs Index</a> <a class="hide_me_html" href="index">Tool Documentation Index</a> |
+        	<a href="https://gatkforums.broadinstitute.org/gatk/">Support Forum</a>
+        </p>
+
+        <p class="version">GATK version 4.6.2.0 built at Sun, 13 Apr 2025 13:21:43 -0400.
+        </p>
+
+	</div>
+
+	<?php printFooter($module); ?>

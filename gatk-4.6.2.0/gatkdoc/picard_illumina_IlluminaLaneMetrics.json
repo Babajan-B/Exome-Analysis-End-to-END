@@ -1,0 +1,10 @@
+{
+  "summary": "Metrics",
+  "arguments": [],
+  "description": "Embodies characteristics that describe a lane.\n@author mccowan",
+  "name": "IlluminaLaneMetrics",
+  "group": "Metrics",
+  "beta": false,
+  "experimental": false,
+  "deprecated": false
+}

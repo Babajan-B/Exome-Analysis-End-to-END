@@ -1,0 +1,154 @@
+<?php
+
+    include '../../../common/include/common.php';
+    include_once '../../config.php';
+    $module = modules::GATK;
+    printHeader($module, $name, topSN::guide);
+?>
+
+<link type='text/css' rel='stylesheet' href='gatkDoc.css'>
+
+<div class='row-fluid' id="top">
+
+	
+	<?php $group = 'Metrics'; ?>
+
+	<section class="span4">
+		<aside class="well">
+			<a href="index.html"><h4><i class='fa fa-chevron-left'></i> Back to Tool Docs Index</h4></a>
+		</aside>
+		<?php getForumPosts( 'ArraysVariantCallingDetailMetrics' ) ?>
+
+	</section>
+
+	<div class="span8">
+
+		<h1>ArraysVariantCallingDetailMetrics</h1>
+
+		<p class="lead">Metrics</p>
+
+			<h3>Category
+				<small> Metrics</small>
+			</h3>
+		<hr>
+		<h2>Overview</h2>
+		
+
+				<p>This table summarizes the values that are specific to this metric.</p>
+				<table class="table table-striped table-bordered table-condensed">
+					<thead>
+					<tr>
+						<th>Metric</th>
+						<th>Summary</th>
+					</tr>
+					</thead>
+					<tr>
+						<td>CHIP_WELL_BARCODE<br />
+						<td>The chip well barcode of the Illumina array being assayed</td>
+					</tr>
+					<tr>
+						<td>SAMPLE_ALIAS<br />
+						<td>The name of the sample</td>
+					</tr>
+					<tr>
+						<td>ANALYSIS_VERSION<br />
+						<td>The version number of the analysis run</td>
+					</tr>
+					<tr>
+						<td>CHIP_TYPE<br />
+						<td>The chip type name</td>
+					</tr>
+					<tr>
+						<td>AUTOCALL_PF<br />
+						<td>Whether the sample passes QC based on call rate threshold</td>
+					</tr>
+					<tr>
+						<td>AUTOCALL_DATE<br />
+						<td>The date this sample was autocalled</td>
+					</tr>
+					<tr>
+						<td>IMAGING_DATE<br />
+						<td>The date that this sample was imaged</td>
+					</tr>
+					<tr>
+						<td>IS_ZCALLED<br />
+						<td>Whether the sample was zcalled</td>
+					</tr>
+					<tr>
+						<td>GTC_CALL_RATE<br />
+						<td>The call rate as determined by Autocall/IAAP (and stored in the GTC File)</td>
+					</tr>
+					<tr>
+						<td>AUTOCALL_GENDER<br />
+						<td>The sex, as determined by Autocall</td>
+					</tr>
+					<tr>
+						<td>FP_GENDER<br />
+						<td>The sex, as reported for the fingerprinted sample</td>
+					</tr>
+					<tr>
+						<td>REPORTED_GENDER<br />
+						<td>The sex, as reported by the collaborator</td>
+					</tr>
+					<tr>
+						<td>GENDER_CONCORDANCE_PF<br />
+						<td>Whether or not the three sexs agree</td>
+					</tr>
+					<tr>
+						<td>HET_PCT<br />
+						<td>100 * (count of hets) / (total calls) for this sample</td>
+					</tr>
+					<tr>
+						<td>CLUSTER_FILE_NAME<br />
+						<td>The name of the cluster file used</td>
+					</tr>
+					<tr>
+						<td>P95_GREEN<br />
+						<td>The 95th Intensity Percentile for the green color channel for this sample</td>
+					</tr>
+					<tr>
+						<td>P95_RED<br />
+						<td>The 95th Intensity Percentile for the red color channel for this sample</td>
+					</tr>
+					<tr>
+						<td>AUTOCALL_VERSION<br />
+						<td>The version of autocall used for calling this sample</td>
+					</tr>
+					<tr>
+						<td>ZCALL_VERSION<br />
+						<td>The version of ZCall used for calling this sample</td>
+					</tr>
+					<tr>
+						<td>EXTENDED_MANIFEST_VERSION<br />
+						<td>The version of the Extended Illumina Manifest used for calling this sample</td>
+					</tr>
+					<tr>
+						<td>HET_HOMVAR_RATIO<br />
+						<td>(count of hets)/(count of homozygous non-ref) for this sample</td>
+					</tr>
+					<tr>
+						<td>SCANNER_NAME<br />
+						<td>The name of the scanner used for this sample</td>
+					</tr>
+					<tr>
+						<td>PIPELINE_VERSION<br />
+						<td>The version of the pipeline used for this sample</td>
+					</tr>
+					</tbody>
+				</table>
+
+        <hr>
+        <p><a href='#top'><i class='fa fa-chevron-up'></i> Return to top</a></p>
+        <hr>
+        <p class="see-also">See also 
+        	<a href="https://software.broadinstitute.org/gatk/documentation/">General Documentation</a> |
+        	<a class="hide_me_php" href="index.html">Tool Docs Index</a> <a class="hide_me_html" href="index">Tool Documentation Index</a> |
+        	<a href="https://gatkforums.broadinstitute.org/gatk/">Support Forum</a>
+        </p>
+
+        <p class="version">GATK version 4.6.2.0 built at Sun, 13 Apr 2025 13:21:43 -0400.
+        </p>
+
+	</div>
+
+	<?php printFooter($module); ?>

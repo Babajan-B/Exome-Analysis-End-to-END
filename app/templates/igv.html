@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IGV Visualization - Exome Analysis Pipeline</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+    <script src="https://cdn.jsdelivr.net/npm/igv@2.12.6/dist/igv.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+    <style>
+        body {
+            padding: 20px;
+        }
+        #igv-div {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-top: 20px;
+            height: 800px;
+        }
+        .navigation-links {
+            margin-bottom: 20px;
+        }
+        .navigation-controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .loading-indicator {
+            text-align: center;
+            margin: 20px 0;
+            display: none;
+        }
+        .gene-search-container {
+            position: relative;
+            margin-bottom: 15px;
+        }
+        .gene-search-container input {
+            padding-right: 40px;
+        }
+        .gene-chip {
+            display: inline-block;
+            padding: 5px 10px;
+            margin: 5px;
+            background-color: #e9ecef;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .gene-chip:hover {
+            background-color: #dee2e6;
+        }
+        .ui-autocomplete {
+            max-height: 200px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            z-index: 9999 !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="navigation-links">
+                    <a href="{{ url_for('main.index') }}" class="btn btn-primary">← Back to Home</a>
+                </div>
+                
+                <h1>IGV Visualization</h1>
+                <p class="text-muted">Visualization ID: {{ visualization_id }}</p>
+                
+                <div class="alert alert-info">
+                    <strong>Note:</strong> If you don't see any reads initially, use the navigation controls below to jump to common exome regions or search for a specific gene/region.
+                </div>
+                
+                <div class="navigation-controls">
+                    <h5>Navigation Controls</h5>
+                    <div class="mb-3 gene-search-container">
+                        <label for="gene-search" class="form-label">Search for gene or region:</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="gene-search" placeholder="Type gene name (e.g., BRCA1) or coordinates (chr17:41,196,312-41,277,500)">
+                            <button class="btn btn-primary" type="button" id="search-button">Go</button>
+                        </div>
+                        <small class="form-text text-muted">Enter a gene name or genomic coordinates (chr:start-end)</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Common disease-associated genes:</label>
+                        <div class="common-genes-container">
+                            <span class="gene-chip" data-gene="BRCA1">BRCA1</span>
+                            <span class="gene-chip" data-gene="BRCA2">BRCA2</span>
+                            <span class="gene-chip" data-gene="TP53">TP53</span>
+                            <span class="gene-chip" data-gene="EGFR">EGFR</span>
+                            <span class="gene-chip" data-gene="KRAS">KRAS</span>
+                            <span class="gene-chip" data-gene="PTEN">PTEN</span>
+                            <span class="gene-chip" data-gene="APC">APC</span>
+                            <span class="gene-chip" data-gene="BRAF">BRAF</span>
+                            <span class="gene-chip" data-gene="HER2">HER2</span>
+                            <span class="gene-chip" data-gene="CFTR">CFTR</span>
+                            <span class="gene-chip" data-gene="DMD">DMD</span>
+                            <span class="gene-chip" data-gene="HTT">HTT</span>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Jump to chromosomes:</label>
+                        <div class="btn-group">
+                            <button class="btn btn-outline-secondary" onclick="jumpToRegion('chr1:1,000,000-1,100,000')">chr1</button>
+                            <button class="btn btn-outline-secondary" onclick="jumpToRegion('chr2:1,000,000-1,100,000')">chr2</button>
+                            <button class="btn btn-outline-secondary" onclick="jumpToRegion('chr7:1,000,000-1,100,000')">chr7</button>
+                            <button class="btn btn-outline-secondary" onclick="jumpToRegion('chr17:1,000,000-1,100,000')">chr17</button>
+                            <button class="btn btn-outline-secondary" onclick="jumpToRegion('chr21:1,000,000-1,100,000')">chr21</button>
+                            <button class="btn btn-outline-secondary" onclick="jumpToRegion('chrX:1,000,000-1,100,000')">chrX</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="loading-indicator" id="loading-indicator">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading BAM file, please wait...</p>
+                </div>
+                
+                <div id="igv-div"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let browser = null;
+        
+        // Common gene list for autocomplete
+        const commonGenes = [
+            "BRCA1", "BRCA2", "TP53", "EGFR", "KRAS", "PTEN", "APC", "BRAF", "HER2", "PIK3CA", 
+            "RB1", "CFTR", "DMD", "HTT", "APP", "SOD1", "PSEN1", "HBB", "APOE", "FMR1",
+            "ATM", "MLH1", "MSH2", "PALB2", "CHEK2", "CDH1", "POLD1", "POLE", "NF1", "NF2",
+            "TSC1", "TSC2", "VHL", "RET", "MEN1", "SDHB", "SDHD", "ALK", "ROS1", "MET",
+            "NRAS", "HRAS", "IDH1", "IDH2", "KIT", "PDGFRA", "FGFR1", "FGFR2", "FGFR3", "NOTCH1",
+            "JAK2", "CALR", "MPL", "BCR", "ABL1", "PML", "RARA", "ETV6", "RUNX1", "FLT3"
+        ];
+        
+        // Direct mapping of gene names to genomic coordinates (hg19)
+        const geneCoordinates = {
+            "BRCA1": "chr17:41,196,312-41,277,500",
+            "BRCA2": "chr13:32,889,611-32,973,805",
+            "TP53": "chr17:7,668,402-7,687,550",
+            "EGFR": "chr7:55,152,337-55,207,937",
+            "KRAS": "chr12:25,358,180-25,403,854",
+            "PTEN": "chr10:89,623,195-89,728,532",
+            "APC": "chr5:112,043,217-112,181,936",
+            "BRAF": "chr7:140,419,127-140,624,564",
+            "HER2": "chr17:39,688,320-39,728,763",
+            "PIK3CA": "chr3:178,866,311-178,957,881",
+            "RB1": "chr13:48,877,883-49,056,122",
+            "CFTR": "chr7:117,105,838-117,358,025",
+            "DMD": "chrX:31,115,794-33,357,558",
+            "HTT": "chr4:3,074,510-3,243,960",
+            "APP": "chr21:27,252,861-27,543,446",
+            "SOD1": "chr21:33,031,935-33,041,243",
+            "PSEN1": "chr14:73,603,142-73,690,399",
+            "HBB": "chr11:5,246,694-5,248,301",
+            "APOE": "chr19:45,409,011-45,412,650",
+            "FMR1": "chrX:146,993,469-147,032,647",
+            "ATM": "chr11:108,093,559-108,239,826",
+            "MLH1": "chr3:37,034,841-37,092,337",
+            "MSH2": "chr2:47,630,206-47,710,367",
+            "PALB2": "chr16:23,603,160-23,641,310",
+            "CHEK2": "chr22:29,083,731-29,137,822",
+            "CDH1": "chr16:68,771,195-68,869,444",
+            "NF1": "chr17:29,421,945-29,709,134",
+            "NF2": "chr22:29,999,545-30,094,587"
+        };
+        
+        document.addEventListener("DOMContentLoaded", function () {
+            const loadingIndicator = document.getElementById("loading-indicator");
+            loadingIndicator.style.display = "block";
+            
+            const igvDiv = document.getElementById("igv-div");
+            
+            const options = {
+                genome: "hg19",
+                locus: "chr7:55,152,337-55,207,937", // Default to EGFR (a commonly studied gene in exomes)
+                tracks: [
+                    {
+                        name: "Sample BAM",
+                        url: "{{ bam_url }}",
+                        indexURL: "{{ bai_url }}",
+                        format: "bam",
+                        height: 500,
+                        visibilityWindow: 1000000,  // Increased visibility window for exome data
+                        autoHeight: true,
+                        colorBy: "strand",
+                        showSoftClips: true,
+                        showMismatches: true
+                    }
+                ],
+                // Add reference gene track to provide context
+                annotations: [
+                    {
+                        name: "RefSeq Genes",
+                        type: "annotation",
+                        format: "refgene",
+                        url: "https://s3.amazonaws.com/igv.org.genomes/hg19/refGene.txt.gz",
+                        indexURL: "https://s3.amazonaws.com/igv.org.genomes/hg19/refGene.txt.gz.tbi",
+                        visibilityWindow: 1000000,
+                        displayMode: "EXPANDED"
+                    }
+                ]
+            };
+
+            igv.createBrowser(igvDiv, options)
+                .then(function (b) {
+                    console.log("IGV browser created");
+                    browser = b;
+                    loadingIndicator.style.display = "none";
+                })
+                .catch(function (error) {
+                    console.error("Error creating IGV browser:", error);
+                    loadingIndicator.style.display = "none";
+                    alert("Error loading IGV: " + error);
+                });
+                
+            // Set up search button
+            document.getElementById("search-button").addEventListener("click", function() {
+                const searchText = document.getElementById("gene-search").value.trim();
+                if (searchText) {
+                    jumpToRegion(searchText);
+                }
+            });
+            
+            // Allow pressing Enter in the search box
+            document.getElementById("gene-search").addEventListener("keyup", function(event) {
+                if (event.key === "Enter") {
+                    const searchText = document.getElementById("gene-search").value.trim();
+                    if (searchText) {
+                        jumpToRegion(searchText);
+                    }
+                }
+            });
+            
+            // Set up gene chip clicking
+            document.querySelectorAll(".gene-chip").forEach(chip => {
+                chip.addEventListener("click", function() {
+                    const gene = this.getAttribute("data-gene");
+                    document.getElementById("gene-search").value = gene;
+                    jumpToRegion(gene);
+                });
+            });
+            
+            // Setup autocomplete for gene search
+            $("#gene-search").autocomplete({
+                source: function(request, response) {
+                    var term = request.term.toUpperCase();
+                    var matches = commonGenes.filter(gene => 
+                        gene.toUpperCase().indexOf(term) !== -1
+                    );
+                    response(matches.slice(0, 10)); // Limit to 10 results
+                },
+                minLength: 2,
+                select: function(event, ui) {
+                    jumpToRegion(ui.item.value);
+                }
+            });
+        });
+        
+        // Function to navigate to a specific region
+        function jumpToRegion(region) {
+            if (browser) {
+                document.getElementById("loading-indicator").style.display = "block";
+                
+                // First try to look up the region in our direct coordinate mapping
+                let locus = region;
+                
+                // Check if this is a gene name in our coordinate map
+                if (geneCoordinates[region]) {
+                    locus = geneCoordinates[region];
+                    console.log(`Using direct coordinates for ${region}: ${locus}`);
+                } 
+                // Check if it's a gene name (uppercase) in our coordinate map
+                else if (geneCoordinates[region.toUpperCase()]) {
+                    locus = geneCoordinates[region.toUpperCase()];
+                    console.log(`Using direct coordinates for ${region}: ${locus}`);
+                }
+                
+                // Use direct goto method for better reliability
+                try {
+                    browser.goto(locus)
+                        .then(() => {
+                            document.getElementById("loading-indicator").style.display = "none";
+                        })
+                        .catch(error => {
+                            console.error("Error with browser.goto:", error);
+                            
+                            // Fallback to search method if goto fails
+                            browser.search(locus)
+                                .then(() => {
+                                    document.getElementById("loading-indicator").style.display = "none";
+                                })
+                                .catch(searchError => {
+                                    console.error("Error with browser.search:", searchError);
+                                    document.getElementById("loading-indicator").style.display = "none";
+                                    alert(`Could not navigate to: ${region}. Please try using coordinates directly (e.g., chr17:41,196,312-41,277,500)`);
+                                });
+                        });
+                } catch (e) {
+                    console.error("Exception in jumpToRegion:", e);
+                    document.getElementById("loading-indicator").style.display = "none";
+                    alert(`Error navigating to: ${region}: ${e.message}`);
+                }
+            }
+        }
+    </script>
+</body>
+</html> 

@@ -1,0 +1,94 @@
+<?php
+
+    include '../../../common/include/common.php';
+    include_once '../../config.php';
+    $module = modules::GATK;
+    printHeader($module, $name, topSN::guide);
+?>
+
+<link type='text/css' rel='stylesheet' href='gatkDoc.css'>
+
+<div class='row-fluid' id="top">
+
+	
+	<?php $group = 'Metrics'; ?>
+
+	<section class="span4">
+		<aside class="well">
+			<a href="index.html"><h4><i class='fa fa-chevron-left'></i> Back to Tool Docs Index</h4></a>
+		</aside>
+		<?php getForumPosts( 'GenotypeConcordanceContingencyMetrics' ) ?>
+
+	</section>
+
+	<div class="span8">
+
+		<h1>GenotypeConcordanceContingencyMetrics</h1>
+
+		<p class="lead">Metrics</p>
+
+			<h3>Category
+				<small> Metrics</small>
+			</h3>
+		<hr>
+		<h2>Overview</h2>
+		Class that holds metrics about the Genotype Concordance contingency tables.
+
+				<p>This table summarizes the values that are specific to this metric.</p>
+				<table class="table table-striped table-bordered table-condensed">
+					<thead>
+					<tr>
+						<th>Metric</th>
+						<th>Summary</th>
+					</tr>
+					</thead>
+					<tr>
+						<td>VARIANT_TYPE<br />
+						<td>The type of the event (i.e. either SNP or INDEL)</td>
+					</tr>
+					<tr>
+						<td>TRUTH_SAMPLE<br />
+						<td>The name of the 'truth' sample</td>
+					</tr>
+					<tr>
+						<td>CALL_SAMPLE<br />
+						<td>The name of the 'call' sample</td>
+					</tr>
+					<tr>
+						<td>TP_COUNT<br />
+						<td>The TP (true positive) count across all variants</td>
+					</tr>
+					<tr>
+						<td>TN_COUNT<br />
+						<td>The TN (true negative) count across all variants</td>
+					</tr>
+					<tr>
+						<td>FP_COUNT<br />
+						<td>The FP (false positive) count across all variants</td>
+					</tr>
+					<tr>
+						<td>FN_COUNT<br />
+						<td>The FN (false negative) count across all variants</td>
+					</tr>
+					<tr>
+						<td>EMPTY_COUNT<br />
+						<td>The empty (no contingency info) count across all variants</td>
+					</tr>
+					</tbody>
+				</table>
+
+        <hr>
+        <p><a href='#top'><i class='fa fa-chevron-up'></i> Return to top</a></p>
+        <hr>
+        <p class="see-also">See also 
+        	<a href="https://software.broadinstitute.org/gatk/documentation/">General Documentation</a> |
+        	<a class="hide_me_php" href="index.html">Tool Docs Index</a> <a class="hide_me_html" href="index">Tool Documentation Index</a> |
+        	<a href="https://gatkforums.broadinstitute.org/gatk/">Support Forum</a>
+        </p>
+
+        <p class="version">GATK version 4.6.2.0 built at Sun, 13 Apr 2025 13:21:43 -0400.
+        </p>
+
+	</div>
+
+	<?php printFooter($module); ?>

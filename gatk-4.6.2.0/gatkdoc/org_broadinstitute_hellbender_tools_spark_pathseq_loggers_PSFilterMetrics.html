@@ -1,0 +1,106 @@
+<?php
+
+    include '../../../common/include/common.php';
+    include_once '../../config.php';
+    $module = modules::GATK;
+    printHeader($module, $name, topSN::guide);
+?>
+
+<link type='text/css' rel='stylesheet' href='gatkDoc.css'>
+
+<div class='row-fluid' id="top">
+
+	
+	<?php $group = 'Metrics'; ?>
+
+	<section class="span4">
+		<aside class="well">
+			<a href="index.html"><h4><i class='fa fa-chevron-left'></i> Back to Tool Docs Index</h4></a>
+		</aside>
+		<?php getForumPosts( 'PSFilterMetrics' ) ?>
+
+	</section>
+
+	<div class="span8">
+
+		<h1>PSFilterMetrics</h1>
+
+		<p class="lead">Metrics</p>
+
+			<h3>Category
+				<small> Metrics</small>
+			</h3>
+		<hr>
+		<h2>Overview</h2>
+		Metrics that are calculated during the PathSeq filter
+
+				<p>This table summarizes the values that are specific to this metric.</p>
+				<table class="table table-striped table-bordered table-condensed">
+					<thead>
+					<tr>
+						<th>Metric</th>
+						<th>Summary</th>
+					</tr>
+					</thead>
+					<tr>
+						<td>PRIMARY_READS<br />
+						<td>Number of input reads that are not secondary or supplementary alignments</td>
+					</tr>
+					<tr>
+						<td>READS_AFTER_PREALIGNED_HOST_FILTER<br />
+						<td>The number of reads after filtering prealigned reads</td>
+					</tr>
+					<tr>
+						<td>READS_AFTER_QUALITY_AND_COMPLEXITY_FILTER<br />
+						<td>The number of reads after low-quality and low-complexity filtering</td>
+					</tr>
+					<tr>
+						<td>READS_AFTER_HOST_FILTER<br />
+						<td>The number of reads after host read filtering</td>
+					</tr>
+					<tr>
+						<td>READS_AFTER_DEDUPLICATION<br />
+						<td>The number of reads after deduplication</td>
+					</tr>
+					<tr>
+						<td>FINAL_PAIRED_READS<br />
+						<td>The number of non-host reads that have mates</td>
+					</tr>
+					<tr>
+						<td>FINAL_UNPAIRED_READS<br />
+						<td>The number of non-host unpaired reads</td>
+					</tr>
+					<tr>
+						<td>FINAL_TOTAL_READS<br />
+						<td>The number of non-host reads in total</td>
+					</tr>
+					<tr>
+						<td>LOW_QUALITY_OR_LOW_COMPLEXITY_READS_FILTERED<br />
+						<td>The number of reads filtered because they were low-quality or low-complexity</td>
+					</tr>
+					<tr>
+						<td>HOST_READS_FILTERED<br />
+						<td>The number of subtracted reads identified as host</td>
+					</tr>
+					<tr>
+						<td>DUPLICATE_READS_FILTERED<br />
+						<td>The number of filtered duplicate reads</td>
+					</tr>
+					</tbody>
+				</table>
+
+        <hr>
+        <p><a href='#top'><i class='fa fa-chevron-up'></i> Return to top</a></p>
+        <hr>
+        <p class="see-also">See also 
+        	<a href="https://software.broadinstitute.org/gatk/documentation/">General Documentation</a> |
+        	<a class="hide_me_php" href="index.html">Tool Docs Index</a> <a class="hide_me_html" href="index">Tool Documentation Index</a> |
+        	<a href="https://gatkforums.broadinstitute.org/gatk/">Support Forum</a>
+        </p>
+
+        <p class="version">GATK version 4.6.2.0 built at Sun, 13 Apr 2025 13:21:43 -0400.
+        </p>
+
+	</div>
+
+	<?php printFooter($module); ?>

@@ -1,0 +1,10 @@
+{
+  "summary": "Metrics",
+  "arguments": [],
+  "description": "Holds information about CpG sites encountered for RRBS processing QC\n@author jgentry",
+  "name": "RrbsCpgDetailMetrics",
+  "group": "Metrics",
+  "beta": false,
+  "experimental": false,
+  "deprecated": false
+}

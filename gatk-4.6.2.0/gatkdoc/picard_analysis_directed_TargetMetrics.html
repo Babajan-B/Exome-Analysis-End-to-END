@@ -1,0 +1,108 @@
+<?php
+
+    include '../../../common/include/common.php';
+    include_once '../../config.php';
+    $module = modules::GATK;
+    printHeader($module, $name, topSN::guide);
+?>
+
+<link type='text/css' rel='stylesheet' href='gatkDoc.css'>
+
+<div class='row-fluid' id="top">
+
+	
+	<?php $group = 'Metrics'; ?>
+
+	<section class="span4">
+		<aside class="well">
+			<a href="index.html"><h4><i class='fa fa-chevron-left'></i> Back to Tool Docs Index</h4></a>
+		</aside>
+		<?php getForumPosts( 'TargetMetrics' ) ?>
+
+	</section>
+
+	<div class="span8">
+
+		<h1>TargetMetrics</h1>
+
+		<p class="lead">Metrics</p>
+
+			<h3>Category
+				<small> Metrics</small>
+			</h3>
+		<hr>
+		<h2>Overview</h2>
+		TargetMetrics, are metrics to measure how well we hit specific targets (or baits) when using a targeted sequencing process like hybrid selection
+ or Targeted PCR Techniques (TSCA).  TargetMetrics at the moment are the metrics that are shared by both HybridSelection and TargetedPcrMetrics.
+
+				<p>This table summarizes the values that are specific to this metric.</p>
+				<table class="table table-striped table-bordered table-condensed">
+					<thead>
+					<tr>
+						<th>Metric</th>
+						<th>Summary</th>
+					</tr>
+					</thead>
+					<tr>
+						<td>PROBE_SET<br />
+						<td>The name of the PROBE_SET (BAIT_SET, AMPLICON_SET, ...) used in this metrics collection run</td>
+					</tr>
+					<tr>
+						<td>PROBE_TERRITORY<br />
+						<td>The number of unique bases covered by the intervals of all probes in the probe set</td>
+					</tr>
+					<tr>
+						<td>ON_PROBE_BASES<br />
+						<td>The number of PF aligned probed bases that mapped to a baited region of the genome.</td>
+					</tr>
+					<tr>
+						<td>NEAR_PROBE_BASES<br />
+						<td>The number of PF aligned bases that mapped to within a fixed interval of a probed region, but not on a
+  probed region.</td>
+					</tr>
+					<tr>
+						<td>OFF_PROBE_BASES<br />
+						<td>The number of PF aligned bases that mapped to neither on or near a probe.</td>
+					</tr>
+					<tr>
+						<td>PCT_SELECTED_BASES<br />
+						<td>The fraction of bases that map on or near a probe (ON_PROBE_BASES + NEAR_PROBE_BASES)/(ON_PROBE_BASES +
+ NEAR_PROBE_BASES + OFF_PROBE_BASES).</td>
+					</tr>
+					<tr>
+						<td>PCT_OFF_PROBE<br />
+						<td>The fraction of aligned PF bases that mapped neither on or near a probe, OFF_PROBE_BASES/(ON_PROBE_BASES +
+  NEAR_PROBE_BASES + OFF_PROBE_BASES).</td>
+					</tr>
+					<tr>
+						<td>ON_PROBE_VS_SELECTED<br />
+						<td>The fraction of on+near probe bases that are on as opposed to near, ON_PROBE_BASES/(ON_PROBE_BASES +
+ NEAR_PROBE_BASES).</td>
+					</tr>
+					<tr>
+						<td>MEAN_PROBE_COVERAGE<br />
+						<td>The mean coverage of all probes in the experiment, ON_PROBE_BASES/PROBE_TERRITORY.</td>
+					</tr>
+					<tr>
+						<td>FOLD_ENRICHMENT<br />
+						<td>The fold by which the probed region has been amplified above genomic background,
+ (ON_PROBE_BASES/(ON_PROBE_BASES + NEAR_PROBE_BASES + OFF_PROBE_BASES))/(PROBE_TERRITORY/GENOME_SIZE)</td>
+					</tr>
+					</tbody>
+				</table>
+
+        <hr>
+        <p><a href='#top'><i class='fa fa-chevron-up'></i> Return to top</a></p>
+        <hr>
+        <p class="see-also">See also 
+        	<a href="https://software.broadinstitute.org/gatk/documentation/">General Documentation</a> |
+        	<a class="hide_me_php" href="index.html">Tool Docs Index</a> <a class="hide_me_html" href="index">Tool Documentation Index</a> |
+        	<a href="https://gatkforums.broadinstitute.org/gatk/">Support Forum</a>
+        </p>
+
+        <p class="version">GATK version 4.6.2.0 built at Sun, 13 Apr 2025 13:21:43 -0400.
+        </p>
+
+	</div>
+
+	<?php printFooter($module); ?>

@@ -1,0 +1,117 @@
+<?php
+
+    include '../../../common/include/common.php';
+    include_once '../../config.php';
+    $module = modules::GATK;
+    printHeader($module, $name, topSN::guide);
+?>
+
+<link type='text/css' rel='stylesheet' href='gatkDoc.css'>
+
+<div class='row-fluid' id="top">
+
+	
+	<?php $group = 'Metrics'; ?>
+
+	<section class="span4">
+		<aside class="well">
+			<a href="index.html"><h4><i class='fa fa-chevron-left'></i> Back to Tool Docs Index</h4></a>
+		</aside>
+		<?php getForumPosts( 'SamComparisonMetric' ) ?>
+
+	</section>
+
+	<div class="span8">
+
+		<h1>SamComparisonMetric</h1>
+
+		<p class="lead">Metrics</p>
+
+			<h3>Category
+				<small> Metrics</small>
+			</h3>
+		<hr>
+		<h2>Overview</h2>
+		Metric for results of SamComparison.  Used to store results in CompareSAMs.
+
+				<p>This table summarizes the values that are specific to this metric.</p>
+				<table class="table table-striped table-bordered table-condensed">
+					<thead>
+					<tr>
+						<th>Metric</th>
+						<th>Summary</th>
+					</tr>
+					</thead>
+					<tr>
+						<td>LEFT_FILE<br />
+						<td>Left file used in comparison</td>
+					</tr>
+					<tr>
+						<td>RIGHT_FILE<br />
+						<td>Right file used in comparison</td>
+					</tr>
+					<tr>
+						<td>MAPPINGS_MATCH<br />
+						<td>The number of primary records for which mappings match in files.  If running in strict alignment mode, this counts only records
+ which are mapped in both files with the same alignment start positions and strands.  If running with LENIENT_LOW_MQ_ALIGNMENT=true, then
+ all records which are mapped in both files with mapping quality at most equal to LOW_MQ_THRESHOLD are counted as matching. If
+ running with LENIENT_255_MQ_ALIGNMENT=true, all records which are mapped in both files with mapping quality 255 are counted as matches.</td>
+					</tr>
+					<tr>
+						<td>MAPPINGS_DIFFER<br />
+						<td>The number of primary records which are mapped in both files but do not meet criteria to be counted in MAPPINGS_MATCH.</td>
+					</tr>
+					<tr>
+						<td>UNMAPPED_BOTH<br />
+						<td>The number of primary records which are not mapped in either file.</td>
+					</tr>
+					<tr>
+						<td>UNMAPPED_LEFT<br />
+						<td>The number of primary records which are mapped in right file and found but not mapped in left file</td>
+					</tr>
+					<tr>
+						<td>UNMAPPED_RIGHT<br />
+						<td>The number of primary records which are mapped in left file and found but not mapped in right file</td>
+					</tr>
+					<tr>
+						<td>MISSING_LEFT<br />
+						<td>The number of primary records which are found in right file but not found in left file</td>
+					</tr>
+					<tr>
+						<td>MISSING_RIGHT<br />
+						<td>The number of primary records which are found in left file but not found in right file</td>
+					</tr>
+					<tr>
+						<td>DUPLICATE_MARKINGS_DIFFER<br />
+						<td>The number of primary records for which duplicate markings are different.  If running in strict duplicate
+ marking mode, any primary alignment which is marked as a duplicate in one file but not in the other will
+ be counted.  If running with LENIENT_DUP=true, we allow for swaps between duplicate and non-duplicate fragments
+ in the same duplicate set to reduce the number of fragments with different duplicate marking.  Note that this
+ metric is counted on a per read basis, so a paired end fragment which differs in duplicate marking between the two
+ files will increment this metric by 2.</td>
+					</tr>
+					<tr>
+						<td>ARE_EQUAL<br />
+						<td>Whether or not to consider the two input files equal.  The two input files are considered equal iff
+ MAPPINGS_DIFFER == UNMAPPED_LEFT == UNMAPPED_RIGHT == MISSING_LEFT == MISSING_RIGHT == DUPLICATE_MARKINGS_DIFFER == 0 &&
+ the headers have been compared to be equal.  Note that the header comparison result can be dependent on whether
+ the tool is run with LENIENT_HEADER true or false.</td>
+					</tr>
+					</tbody>
+				</table>
+
+        <hr>
+        <p><a href='#top'><i class='fa fa-chevron-up'></i> Return to top</a></p>
+        <hr>
+        <p class="see-also">See also 
+        	<a href="https://software.broadinstitute.org/gatk/documentation/">General Documentation</a> |
+        	<a class="hide_me_php" href="index.html">Tool Docs Index</a> <a class="hide_me_html" href="index">Tool Documentation Index</a> |
+        	<a href="https://gatkforums.broadinstitute.org/gatk/">Support Forum</a>
+        </p>
+
+        <p class="version">GATK version 4.6.2.0 built at Sun, 13 Apr 2025 13:21:43 -0400.
+        </p>
+
+	</div>
+
+	<?php printFooter($module); ?>

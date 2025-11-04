@@ -1,0 +1,113 @@
+<?php
+
+    include '../../../common/include/common.php';
+    include_once '../../config.php';
+    $module = modules::GATK;
+    printHeader($module, $name, topSN::guide);
+?>
+
+<link type='text/css' rel='stylesheet' href='gatkDoc.css'>
+
+<div class='row-fluid' id="top">
+
+	
+	<?php $group = 'Metrics'; ?>
+
+	<section class="span4">
+		<aside class="well">
+			<a href="index.html"><h4><i class='fa fa-chevron-left'></i> Back to Tool Docs Index</h4></a>
+		</aside>
+		<?php getForumPosts( 'UmiMetrics' ) ?>
+
+	</section>
+
+	<div class="span8">
+
+		<h1>UmiMetrics</h1>
+
+		<p class="lead">Metrics</p>
+
+			<h3>Category
+				<small> Metrics</small>
+			</h3>
+		<hr>
+		<h2>Overview</h2>
+		Metrics that are calculated during the process of marking duplicates
+ within a stream of SAMRecords using the UmiAwareDuplicateSetIterator.
+
+				<p>This table summarizes the values that are specific to this metric.</p>
+				<table class="table table-striped table-bordered table-condensed">
+					<thead>
+					<tr>
+						<th>Metric</th>
+						<th>Summary</th>
+					</tr>
+					</thead>
+					<tr>
+						<td>LIBRARY<br />
+						<td>Library that was used to generate UMI data.</td>
+					</tr>
+					<tr>
+						<td>MEAN_UMI_LENGTH<br />
+						<td>Number of bases in each UMI</td>
+					</tr>
+					<tr>
+						<td>OBSERVED_UNIQUE_UMIS<br />
+						<td>Number of different UMI sequences observed</td>
+					</tr>
+					<tr>
+						<td>INFERRED_UNIQUE_UMIS<br />
+						<td>Number of different inferred UMI sequences derived</td>
+					</tr>
+					<tr>
+						<td>OBSERVED_BASE_ERRORS<br />
+						<td>Number of errors inferred by comparing the observed and inferred UMIs</td>
+					</tr>
+					<tr>
+						<td>DUPLICATE_SETS_IGNORING_UMI<br />
+						<td>Number of duplicate sets found before taking UMIs into account</td>
+					</tr>
+					<tr>
+						<td>DUPLICATE_SETS_WITH_UMI<br />
+						<td>Number of duplicate sets found after taking UMIs into account</td>
+					</tr>
+					<tr>
+						<td>OBSERVED_UMI_ENTROPY<br />
+						<td>Entropy (in base 4) of the observed UMI sequences, indicating the
+ effective number of bases in the UMIs.  If this is significantly
+ smaller than UMI_LENGTH, it indicates that the UMIs are not
+ distributed uniformly.</td>
+					</tr>
+					<tr>
+						<td>INFERRED_UMI_ENTROPY<br />
+						<td>Entropy (in base 4) of the inferred UMI sequences, indicating the
+ effective number of bases in the inferred UMIs.  If this is significantly
+ smaller than UMI_LENGTH, it indicates that the UMIs are not
+ distributed uniformly.</td>
+					</tr>
+					<tr>
+						<td>UMI_BASE_QUALITIES<br />
+						<td>Estimation of Phred scaled quality scores for UMIs</td>
+					</tr>
+					<tr>
+						<td>PCT_UMI_WITH_N<br />
+						<td>The percentage of reads that contain an UMI that contains at least one N</td>
+					</tr>
+					</tbody>
+				</table>
+
+        <hr>
+        <p><a href='#top'><i class='fa fa-chevron-up'></i> Return to top</a></p>
+        <hr>
+        <p class="see-also">See also 
+        	<a href="https://software.broadinstitute.org/gatk/documentation/">General Documentation</a> |
+        	<a class="hide_me_php" href="index.html">Tool Docs Index</a> <a class="hide_me_html" href="index">Tool Documentation Index</a> |
+        	<a href="https://gatkforums.broadinstitute.org/gatk/">Support Forum</a>
+        </p>
+
+        <p class="version">GATK version 4.6.2.0 built at Sun, 13 Apr 2025 13:21:43 -0400.
+        </p>
+
+	</div>
+
+	<?php printFooter($module); ?>

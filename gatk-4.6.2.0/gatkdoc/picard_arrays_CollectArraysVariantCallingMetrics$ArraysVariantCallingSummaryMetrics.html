@@ -1,0 +1,123 @@
+<?php
+
+    include '../../../common/include/common.php';
+    include_once '../../config.php';
+    $module = modules::GATK;
+    printHeader($module, $name, topSN::guide);
+?>
+
+<link type='text/css' rel='stylesheet' href='gatkDoc.css'>
+
+<div class='row-fluid' id="top">
+
+	
+	<?php $group = 'Metrics'; ?>
+
+	<section class="span4">
+		<aside class="well">
+			<a href="index.html"><h4><i class='fa fa-chevron-left'></i> Back to Tool Docs Index</h4></a>
+		</aside>
+		<?php getForumPosts( 'ArraysVariantCallingSummaryMetrics' ) ?>
+
+	</section>
+
+	<div class="span8">
+
+		<h1>ArraysVariantCallingSummaryMetrics</h1>
+
+		<p class="lead">Metrics</p>
+
+			<h3>Category
+				<small> Metrics</small>
+			</h3>
+		<hr>
+		<h2>Overview</h2>
+		
+
+				<p>This table summarizes the values that are specific to this metric.</p>
+				<table class="table table-striped table-bordered table-condensed">
+					<thead>
+					<tr>
+						<th>Metric</th>
+						<th>Summary</th>
+					</tr>
+					</thead>
+					<tr>
+						<td>NUM_ASSAYS<br />
+						<td>The total number of assays (SNP and indels) in the VCF</td>
+					</tr>
+					<tr>
+						<td>NUM_NON_FILTERED_ASSAYS<br />
+						<td>The total number of NON-filtered assays in the VCF</td>
+					</tr>
+					<tr>
+						<td>NUM_FILTERED_ASSAYS<br />
+						<td>The total number of filtered assays in the VCF</td>
+					</tr>
+					<tr>
+						<td>NUM_ZEROED_OUT_ASSAYS<br />
+						<td>The total number of zeroed-out (filtered out by Illumina in chip design) assays in the VCF</td>
+					</tr>
+					<tr>
+						<td>NUM_SNPS<br />
+						<td>The number of bi-allelic SNP calls</td>
+					</tr>
+					<tr>
+						<td>NUM_INDELS<br />
+						<td>The number of indel calls</td>
+					</tr>
+					<tr>
+						<td>NUM_CALLS<br />
+						<td>The number of passing calls</td>
+					</tr>
+					<tr>
+						<td>NUM_AUTOCALL_CALLS<br />
+						<td>The number of passing autocall calls</td>
+					</tr>
+					<tr>
+						<td>NUM_NO_CALLS<br />
+						<td>The number of no-calls</td>
+					</tr>
+					<tr>
+						<td>NUM_IN_DB_SNP<br />
+						<td>The number of high confidence SNPs found in dbSNP</td>
+					</tr>
+					<tr>
+						<td>NOVEL_SNPS<br />
+						<td>The number of high confidence SNPS called that were not found in dbSNP</td>
+					</tr>
+					<tr>
+						<td>PCT_DBSNP<br />
+						<td>The fraction of high confidence SNPs in dbSNP</td>
+					</tr>
+					<tr>
+						<td>CALL_RATE<br />
+						<td>The overall call rate</td>
+					</tr>
+					<tr>
+						<td>AUTOCALL_CALL_RATE<br />
+						<td>The overall autocall call rate</td>
+					</tr>
+					<tr>
+						<td>NUM_SINGLETONS<br />
+						<td>For summary metrics, the number of variants that appear in only one sample.
+ For detail metrics, the number of variants that appear only in the current sample.</td>
+					</tr>
+					</tbody>
+				</table>
+
+        <hr>
+        <p><a href='#top'><i class='fa fa-chevron-up'></i> Return to top</a></p>
+        <hr>
+        <p class="see-also">See also 
+        	<a href="https://software.broadinstitute.org/gatk/documentation/">General Documentation</a> |
+        	<a class="hide_me_php" href="index.html">Tool Docs Index</a> <a class="hide_me_html" href="index">Tool Documentation Index</a> |
+        	<a href="https://gatkforums.broadinstitute.org/gatk/">Support Forum</a>
+        </p>
+
+        <p class="version">GATK version 4.6.2.0 built at Sun, 13 Apr 2025 13:21:43 -0400.
+        </p>
+
+	</div>
+
+	<?php printFooter($module); ?>

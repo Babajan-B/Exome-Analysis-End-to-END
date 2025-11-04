@@ -1,0 +1,10 @@
+{
+  "summary": "Existence of a transmitted (or non-transmitted) singleton in at least one of the given families (transmittedSingleton, nonTransmittedSingleton)",
+  "arguments": [],
+  "description": "Existence of a transmitted or non-transmitted singleton in at least one of the given families\n\n \u003cp\u003eThis annotation uses the genotype information from individuals in family trios to identify transmitted and non-transmitted singletons and the sample(s) in which they occur.\n Transmitted singletons occur at sites in a cohort where the allele count is two and these two alleles occur in one parent and the child of a trio. A non-transmitted singleton\n are sites with an allele count of one and this one allele occurs in a parent, but not the child of a trio. In both cases the other parent must have a high quality hom ref call.\n\n \u003ch3\u003eCaveats\u003c/h3\u003e\n \u003cul\u003e\n     \u003cli\u003eThe calculation assumes that the organism is diploid.\u003c/li\u003e\n     \u003cli\u003eThis annotation requires a valid pedigree file.\u003c/li\u003e\n     \u003cli\u003eThis annotation is only valid for trios, not quads or other more complicated family structures.\u003c/li\u003e\n     \u003cli\u003eOnly reports possible singletons for families where each of the three samples has high GQ (\u003e20) and high depth (\u003e20)\u003c/li\u003e\n     \u003cli\u003eOnly reports possible singletons at sites with a Call Rate greater than 90% (meaning less than 10% of the samples at the given site were no-calls)\u003c/li\u003e\n \u003c/ul\u003e",
+  "name": "TransmittedSingleton",
+  "group": "Variant Annotations",
+  "beta": false,
+  "experimental": false,
+  "deprecated": false
+}

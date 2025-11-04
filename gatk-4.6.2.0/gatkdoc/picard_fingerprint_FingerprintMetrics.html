@@ -1,0 +1,170 @@
+<?php
+
+    include '../../../common/include/common.php';
+    include_once '../../config.php';
+    $module = modules::GATK;
+    printHeader($module, $name, topSN::guide);
+?>
+
+<link type='text/css' rel='stylesheet' href='gatkDoc.css'>
+
+<div class='row-fluid' id="top">
+
+	
+	<?php $group = 'Metrics'; ?>
+
+	<section class="span4">
+		<aside class="well">
+			<a href="index.html"><h4><i class='fa fa-chevron-left'></i> Back to Tool Docs Index</h4></a>
+		</aside>
+		<?php getForumPosts( 'FingerprintMetrics' ) ?>
+
+	</section>
+
+	<div class="span8">
+
+		<h1>FingerprintMetrics</h1>
+
+		<p class="lead">Metrics</p>
+
+			<h3>Category
+				<small> Metrics</small>
+			</h3>
+		<hr>
+		<h2>Overview</h2>
+		Class for holding metrics on a single fingerprint.
+ Note: this is distinct from {@link FingerprintingDetailMetrics} and
+ {@link FingerprintingSummaryMetrics} in that it is calculated on a single fingerprint,
+ and attempts to describe how likely that fingerprint is to have arisen from an actual sample
+ as opposed to having artifacts such as contamination, or strong bias towards homozygous genotypes.
+
+ Several tests use "expected" genotype distribution based on the allele frequency stored in the haplotype-database
+ file that is used, and assuming Hardy-Weinberg equilibrium.
+
+ Please see the FingerprintMetrics definitions
+ http://broadinstitute.github.io/picard/picard-metric-definitions.html#FingerprintMetrics " +
+ for a complete description of the metrics produced by this tool.
+
+				<p>This table summarizes the values that are specific to this metric.</p>
+				<table class="table table-striped table-bordered table-condensed">
+					<thead>
+					<tr>
+						<th>Metric</th>
+						<th>Summary</th>
+					</tr>
+					</thead>
+					<tr>
+						<td>SAMPLE_ALIAS<br />
+						<td>The Sample alias taken from RG header or #CHROME line</td>
+					</tr>
+					<tr>
+						<td>SOURCE<br />
+						<td>The originating file (if available) for this fingerprint</td>
+					</tr>
+					<tr>
+						<td>INFO<br />
+						<td>Additional information about the fingerprint</td>
+					</tr>
+					<tr>
+						<td>HAPLOTYPES<br />
+						<td>Number of haplotypes examined</td>
+					</tr>
+					<tr>
+						<td>HAPLOTYPES_WITH_EVIDENCE<br />
+						<td>Number of haplotypes that had evidence in the source file</td>
+					</tr>
+					<tr>
+						<td>DEFINITE_GENOTYPES<br />
+						<td>Number of haplotypes that had enough evidence to make a definite genotype call (genotype LOD > Threshold</td>
+					</tr>
+					<tr>
+						<td>NUM_HOM_ALLELE1<br />
+						<td>Number of major allele homozygous calls</td>
+					</tr>
+					<tr>
+						<td>NUM_HOM_ALLELE2<br />
+						<td>Number of  minor allele homozygous calls</td>
+					</tr>
+					<tr>
+						<td>NUM_HOM_ANY<br />
+						<td>Number of homozygous calls of either allele (might not be the sum of {@link #NUM_HOM_ALLELE1} and {@link #NUM_HOM_ALLELE1} due to rounding</td>
+					</tr>
+					<tr>
+						<td>NUM_HET<br />
+						<td>Number of heterozygous calls</td>
+					</tr>
+					<tr>
+						<td>EXPECTED_HOM_ALLELE1<br />
+						<td>Expected number of  major allele homozygous calls</td>
+					</tr>
+					<tr>
+						<td>EXPECTED_HOM_ALLELE2<br />
+						<td>Expected number of major allele homozygous calls</td>
+					</tr>
+					<tr>
+						<td>EXPECTED_HET<br />
+						<td>Expected number of heterozygous calls</td>
+					</tr>
+					<tr>
+						<td>CHI_SQUARED_PVALUE<br />
+						<td>The Chi-squared pvalue of the observed counts vector relative to the expected counts, (3x2 table)</td>
+					</tr>
+					<tr>
+						<td>LOG10_CHI_SQUARED_PVALUE<br />
+						<td>The log10 of the Chi-squared pvalue</td>
+					</tr>
+					<tr>
+						<td>CROSS_ENTROPY_LOD<br />
+						<td>The categorical cross entropy of the counts of genotypes relative to expected (big is bad)</td>
+					</tr>
+					<tr>
+						<td>HET_CHI_SQUARED_PVALUE<br />
+						<td>The Chi-squared pvalue for the number of HETs and HOMs relative to the expected counts (2x2 table)</td>
+					</tr>
+					<tr>
+						<td>LOG10_HET_CHI_SQUARED_PVALUE<br />
+						<td>The log10 of the Chi-squared pvalue for the number of HETs and HOMs</td>
+					</tr>
+					<tr>
+						<td>HET_CROSS_ENTROPY_LOD<br />
+						<td>The categorical cross entropy of the counts of HETs and HOMs relative to the expected counts (big is bad)</td>
+					</tr>
+					<tr>
+						<td>HOM_CHI_SQUARED_PVALUE<br />
+						<td>The Chi-squared pvalue for {@link #NUM_HOM_ALLELE1} and {@link #NUM_HOM_ALLELE2} relative to the expected counts (2x2 table)</td>
+					</tr>
+					<tr>
+						<td>LOG10_HOM_CHI_SQUARED_PVALUE<br />
+						<td>The log10 of the Chi-squared pvalue for {@link #NUM_HOM_ALLELE1} and {@link #NUM_HOM_ALLELE2}</td>
+					</tr>
+					<tr>
+						<td>HOM_CROSS_ENTROPY_LOD<br />
+						<td>The categorical cross entropy of {@link #NUM_HOM_ALLELE1} and {@link #NUM_HOM_ALLELE2} relative to the expected counts (big is bad)</td>
+					</tr>
+					<tr>
+						<td>LOD_SELF_CHECK<br />
+						<td>The fingerprinting LOD score this sample gets when compared to itself (big is good)</td>
+					</tr>
+					<tr>
+						<td>DISCRIMINATORY_POWER<br />
+						<td>The difference in fingerprinting LOD between LOD_SELF_CHECK and the LOD score found when
+    fingerprinting it against a random permutation of the probablity vectors (PLs) in each of the haplotypes. (big is good.)</td>
+					</tr>
+					</tbody>
+				</table>
+
+        <hr>
+        <p><a href='#top'><i class='fa fa-chevron-up'></i> Return to top</a></p>
+        <hr>
+        <p class="see-also">See also 
+        	<a href="https://software.broadinstitute.org/gatk/documentation/">General Documentation</a> |
+        	<a class="hide_me_php" href="index.html">Tool Docs Index</a> <a class="hide_me_html" href="index">Tool Documentation Index</a> |
+        	<a href="https://gatkforums.broadinstitute.org/gatk/">Support Forum</a>
+        </p>
+
+        <p class="version">GATK version 4.6.2.0 built at Sun, 13 Apr 2025 13:21:43 -0400.
+        </p>
+
+	</div>
+
+	<?php printFooter($module); ?>

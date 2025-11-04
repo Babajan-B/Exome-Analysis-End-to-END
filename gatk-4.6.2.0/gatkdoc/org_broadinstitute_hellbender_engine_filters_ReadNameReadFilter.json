@@ -1,0 +1,27 @@
+{
+  "summary": "Keep only reads with this read name",
+  "arguments": [
+    {
+      "summary": "Keep only reads with this read name",
+      "name": "--read-name",
+      "synonyms": "NA",
+      "type": "Set[String]",
+      "required": "yes",
+      "fulltext": "",
+      "defaultValue": "[]",
+      "minValue": "NA",
+      "maxValue": "NA",
+      "minRecValue": "NA",
+      "maxRecValue": "NA",
+      "kind": "required",
+      "deprecated": false,
+      "options": []
+    }
+  ],
+  "description": "Keep only reads with one of these readnames.\n\n Should you need to provide many readnames to keep, you can provide a newline separated .list file of readnames to keep.\n\n \u003cp\u003eMatching is done by case-sensitive exact match.\u003c/p\u003e",
+  "name": "ReadNameReadFilter",
+  "group": "Read Filters",
+  "beta": false,
+  "experimental": false,
+  "deprecated": false
+}

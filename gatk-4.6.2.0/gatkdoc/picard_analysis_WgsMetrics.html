@@ -1,0 +1,190 @@
+<?php
+
+    include '../../../common/include/common.php';
+    include_once '../../config.php';
+    $module = modules::GATK;
+    printHeader($module, $name, topSN::guide);
+?>
+
+<link type='text/css' rel='stylesheet' href='gatkDoc.css'>
+
+<div class='row-fluid' id="top">
+
+	
+	<?php $group = 'Metrics'; ?>
+
+	<section class="span4">
+		<aside class="well">
+			<a href="index.html"><h4><i class='fa fa-chevron-left'></i> Back to Tool Docs Index</h4></a>
+		</aside>
+		<?php getForumPosts( 'WgsMetrics' ) ?>
+
+	</section>
+
+	<div class="span8">
+
+		<h1>WgsMetrics</h1>
+
+		<p class="lead">Metrics</p>
+
+			<h3>Category
+				<small> Metrics</small>
+			</h3>
+		<hr>
+		<h2>Overview</h2>
+		Metrics for evaluating the performance of whole genome sequencing experiments.
+
+				<p>This table summarizes the values that are specific to this metric.</p>
+				<table class="table table-striped table-bordered table-condensed">
+					<thead>
+					<tr>
+						<th>Metric</th>
+						<th>Summary</th>
+					</tr>
+					</thead>
+					<tr>
+						<td>GENOME_TERRITORY<br />
+						<td>The number of non-N bases in the genome reference over which coverage will be evaluated.</td>
+					</tr>
+					<tr>
+						<td>MEAN_COVERAGE<br />
+						<td>The mean coverage in bases of the genome territory, after all filters are applied.</td>
+					</tr>
+					<tr>
+						<td>SD_COVERAGE<br />
+						<td>The standard deviation of coverage of the genome after all filters are applied.</td>
+					</tr>
+					<tr>
+						<td>MEDIAN_COVERAGE<br />
+						<td>The median coverage in bases of the genome territory, after all filters are applied.</td>
+					</tr>
+					<tr>
+						<td>MAD_COVERAGE<br />
+						<td>The median absolute deviation of coverage of the genome after all filters are applied.</td>
+					</tr>
+					<tr>
+						<td>PCT_EXC_ADAPTER<br />
+						<td>The fraction of aligned bases that were filtered out because they were in reads with mapping quality 0 and the looked like adapter reads.</td>
+					</tr>
+					<tr>
+						<td>PCT_EXC_MAPQ<br />
+						<td>The fraction of aligned bases that were filtered out because they were in reads with low mapping quality (lower than MIN_MAPPING_QUALITY).</td>
+					</tr>
+					<tr>
+						<td>PCT_EXC_DUPE<br />
+						<td>The fraction of aligned bases that were filtered out because they were in reads marked as duplicates.</td>
+					</tr>
+					<tr>
+						<td>PCT_EXC_UNPAIRED<br />
+						<td>The fraction of aligned bases that were filtered out because they were in reads without a mapped mate pair.</td>
+					</tr>
+					<tr>
+						<td>PCT_EXC_BASEQ<br />
+						<td>The fraction of aligned bases that were filtered out because they were of low base quality (lower than MIN_BASE_QUALITY).</td>
+					</tr>
+					<tr>
+						<td>PCT_EXC_OVERLAP<br />
+						<td>The fraction of aligned bases that were filtered out because they were the second observation from an insert with overlapping reads.</td>
+					</tr>
+					<tr>
+						<td>PCT_EXC_CAPPED<br />
+						<td>The fraction of aligned bases that were filtered out because they would have raised coverage above COVERAGE_CAP.</td>
+					</tr>
+					<tr>
+						<td>PCT_EXC_TOTAL<br />
+						<td>The total fraction of aligned bases excluded due to all filters.</td>
+					</tr>
+					<tr>
+						<td>PCT_1X<br />
+						<td>The fraction of bases that attained at least 1X sequence coverage in post-filtering bases.</td>
+					</tr>
+					<tr>
+						<td>PCT_5X<br />
+						<td>The fraction of bases that attained at least 5X sequence coverage in post-filtering bases.</td>
+					</tr>
+					<tr>
+						<td>PCT_10X<br />
+						<td>The fraction of bases that attained at least 10X sequence coverage in post-filtering bases.</td>
+					</tr>
+					<tr>
+						<td>PCT_15X<br />
+						<td>The fraction of bases that attained at least 15X sequence coverage in post-filtering bases.</td>
+					</tr>
+					<tr>
+						<td>PCT_20X<br />
+						<td>The fraction of bases that attained at least 20X sequence coverage in post-filtering bases.</td>
+					</tr>
+					<tr>
+						<td>PCT_25X<br />
+						<td>The fraction of bases that attained at least 25X sequence coverage in post-filtering bases.</td>
+					</tr>
+					<tr>
+						<td>PCT_30X<br />
+						<td>The fraction of bases that attained at least 30X sequence coverage in post-filtering bases.</td>
+					</tr>
+					<tr>
+						<td>PCT_40X<br />
+						<td>The fraction of bases that attained at least 40X sequence coverage in post-filtering bases.</td>
+					</tr>
+					<tr>
+						<td>PCT_50X<br />
+						<td>The fraction of bases that attained at least 50X sequence coverage in post-filtering bases.</td>
+					</tr>
+					<tr>
+						<td>PCT_60X<br />
+						<td>The fraction of bases that attained at least 60X sequence coverage in post-filtering bases.</td>
+					</tr>
+					<tr>
+						<td>PCT_70X<br />
+						<td>The fraction of bases that attained at least 70X sequence coverage in post-filtering bases.</td>
+					</tr>
+					<tr>
+						<td>PCT_80X<br />
+						<td>The fraction of bases that attained at least 80X sequence coverage in post-filtering bases.</td>
+					</tr>
+					<tr>
+						<td>PCT_90X<br />
+						<td>The fraction of bases that attained at least 90X sequence coverage in post-filtering bases.</td>
+					</tr>
+					<tr>
+						<td>PCT_100X<br />
+						<td>The fraction of bases that attained at least 100X sequence coverage in post-filtering bases.</td>
+					</tr>
+					<tr>
+						<td>FOLD_80_BASE_PENALTY<br />
+						<td>The fold over-coverage necessary to raise 80% of bases to the mean coverage level.</td>
+					</tr>
+					<tr>
+						<td>FOLD_90_BASE_PENALTY<br />
+						<td>The fold over-coverage necessary to raise 90% of bases to the mean coverage level.</td>
+					</tr>
+					<tr>
+						<td>FOLD_95_BASE_PENALTY<br />
+						<td>The fold over-coverage necessary to raise 95% of bases to the mean coverage level.</td>
+					</tr>
+					<tr>
+						<td>HET_SNP_SENSITIVITY<br />
+						<td>The theoretical HET SNP sensitivity.</td>
+					</tr>
+					<tr>
+						<td>HET_SNP_Q<br />
+						<td>The Phred Scaled Q Score of the theoretical HET SNP sensitivity.</td>
+					</tr>
+					</tbody>
+				</table>
+
+        <hr>
+        <p><a href='#top'><i class='fa fa-chevron-up'></i> Return to top</a></p>
+        <hr>
+        <p class="see-also">See also 
+        	<a href="https://software.broadinstitute.org/gatk/documentation/">General Documentation</a> |
+        	<a class="hide_me_php" href="index.html">Tool Docs Index</a> <a class="hide_me_html" href="index">Tool Documentation Index</a> |
+        	<a href="https://gatkforums.broadinstitute.org/gatk/">Support Forum</a>
+        </p>
+
+        <p class="version">GATK version 4.6.2.0 built at Sun, 13 Apr 2025 13:21:43 -0400.
+        </p>
+
+	</div>
+
+	<?php printFooter($module); ?>

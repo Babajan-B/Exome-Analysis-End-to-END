@@ -1,0 +1,10 @@
+{
+  "summary": "Metrics",
+  "arguments": [],
+  "description": "",
+  "name": "AlleleFrequencyQCMetric",
+  "group": "Metrics",
+  "beta": false,
+  "experimental": false,
+  "deprecated": false
+}

@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exome Analysis Pipeline</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2c3e50;
+            --accent-color: #16a085;
+            --light-bg: #f8f9fa;
+            --dark-bg: #343a40;
+        }
+        
+        body {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+        }
+        
+        h1, h2, h3, h4, h5, h6 {
+            color: var(--secondary-color);
+            font-weight: 600;
+        }
+        
+        .card {
+            border: none;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.07);
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+        }
+        
+        .card-header {
+            background-color: #fff;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            padding: 1rem 1.5rem;
+            font-weight: 600;
+        }
+        
+        .card-body {
+            padding: 1.5rem;
+        }
+        
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+            background-color: #fff;
+        }
+        
+        .upload-area:hover {
+            border-color: var(--primary-color);
+            transform: translateY(-2px);
+        }
+        
+        .file-input {
+            margin-top: 10px;
+        }
+        
+        .file-label {
+            display: block;
+            cursor: pointer;
+        }
+        
+        .file-name {
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: #555;
+        }
+        
+        #upload-progress, #bam-visual-progress, #vcf-upload-progress {
+            display: none;
+            margin-top: 20px;
+        }
+        
+        .progress-bar {
+            height: 12px;
+            border-radius: 6px;
+        }
+        
+        #debug-info {
+            display: none;
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+        
+        .pipeline-options {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .nav-tabs {
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        
+        .nav-tabs .nav-link {
+            color: #555;
+            border: none;
+            border-bottom: 3px solid transparent;
+            padding: 0.8rem 1.5rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .nav-tabs .nav-link:hover {
+            border-color: rgba(0, 0, 0, 0.1);
+            color: var(--primary-color);
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: var(--primary-color);
+            background-color: transparent;
+            border-bottom: 3px solid var(--primary-color);
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            font-weight: 500;
+            padding: 0.6rem 1.5rem;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover, .btn-primary:focus {
+            background-color: #2980b9;
+            border-color: #2980b9;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .alert {
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        
+        .alert-info {
+            background-color: rgba(52, 152, 219, 0.1);
+            border-color: rgba(52, 152, 219, 0.2);
+            color: #2573a7;
+        }
+        
+        .alert-warning {
+            background-color: rgba(243, 156, 18, 0.1);
+            border-color: rgba(243, 156, 18, 0.2);
+            color: #c87f0a;
+        }
+        
+        code {
+            background-color: #eee;
+            border-radius: 4px;
+            padding: 2px 5px;
+            font-size: 90%;
+        }
+        
+        ol li, ul li {
+            margin-bottom: 0.5rem;
+        }
+        
+        hr {
+            opacity: 0.1;
+        }
+        
+        /* Feature list with icons */
+        .feature-list {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .feature-list li {
+            position: relative;
+            padding-left: 30px;
+            margin-bottom: 10px;
+        }
+        
+        .feature-list li i {
+            position: absolute;
+            left: 0;
+            color: var(--primary-color);
+        }
+        
+        .page-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .page-header h1 {
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+        
+        .page-subtitle {
+            font-size: 1.2rem;
+            color: #6c757d;
+            margin-bottom: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="page-header">
+                    <h1 class="mb-2">Exome Analysis Pipeline</h1>
+                    <p class="page-subtitle">A comprehensive pipeline for processing and analyzing genomic data</p>
+                </div>
+                
+                <!-- File Type Tabs -->
+                <ul class="nav nav-tabs" id="fileTypeTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="fastq-tab" data-bs-toggle="tab" data-bs-target="#fastq-content" type="button" role="tab" aria-controls="fastq-content" aria-selected="true">FASTQ Files</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="visualization-tab" data-bs-toggle="tab" data-bs-target="#visualization-content" type="button" role="tab" aria-controls="visualization-content" aria-selected="false">Visualization</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="vcf-tab" data-bs-toggle="tab" data-bs-target="#vcf-content" type="button" role="tab" aria-controls="vcf-content" aria-selected="false">VCF File</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="continue-tab" data-bs-toggle="tab" data-bs-target="#continue-content" type="button" role="tab" aria-controls="continue-content" aria-selected="false">Continue Analysis</button>
+                    </li>
+                </ul>
+                
+                <!-- Tab Content -->
+                <div class="tab-content" id="fileTypeTabsContent">
+                    <!-- FASTQ Files Tab -->
+                    <div class="tab-pane fade show active" id="fastq-content" role="tabpanel" aria-labelledby="fastq-tab">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>Upload FASTQ Files</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info">
+                                    <strong>Note:</strong> Upload both R1 and R2 files to start the complete analysis pipeline.
+                                </div>
+                                
+                                <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="upload-area" id="r1-upload-area">
+                                                <label for="r1-file" class="file-label">
+                                                    <h4>Forward Reads (R1)</h4>
+                                                    <p>Click to browse files</p>
+                                                    <p class="text-muted">Supported formats: .fastq, .fq, .fastq.gz, .fq.gz</p>
+                                                    <div class="file-name" id="r1-file-name"></div>
+                                                </label>
+                                                <input type="file" name="r1_file" id="r1-file" class="file-input">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="upload-area" id="r2-upload-area">
+                                                <label for="r2-file" class="file-label">
+                                                    <h4>Reverse Reads (R2)</h4>
+                                                    <p>Click to browse files</p>
+                                                    <p class="text-muted">Supported formats: .fastq, .fq, .fastq.gz, .fq.gz</p>
+                                                    <div class="file-name" id="r2-file-name"></div>
+                                                </label>
+                                                <input type="file" name="r2_file" id="r2-file" class="file-input">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div id="debug-info">
+                                        <div>R1 File Selected: <span id="r1-status">No</span></div>
+                                        <div>R2 File Selected: <span id="r2-status">No</span></div>
+                                        <div>Submit Button Status: <span id="button-status">Disabled</span></div>
+                                    </div>
+                                    
+                                    <div class="pipeline-options">
+                                        <h5>Pipeline Options</h5>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" value="1" id="skip_qc" name="skip_qc">
+                                            <label class="form-check-label" for="skip_qc">
+                                                Skip quality control (FastQC) - save time by skipping the quality control step
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" value="1" id="skip_trim" name="skip_trim">
+                                            <label class="form-check-label" for="skip_trim">
+                                                Skip trimming (fastp) - skip trimming of low-quality bases and adapters
+                                            </label>
+                                        </div>
+                                        <small class="text-muted">Note: Trimming produces new optimized FASTQ files used in alignment</small>
+                                    </div>
+                                    
+                                    <div id="upload-progress" class="mt-4">
+                                        <h5>Uploading files... This may take several minutes for large files.</h5>
+                                        <div class="progress">
+                                            <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"></div>
+                                        </div>
+                                        <div id="upload-status" class="mt-2 text-center"></div>
+                                    </div>
+                                    
+                                    <div class="d-grid gap-2">
+                                        <button type="submit" class="btn btn-primary mt-3" id="submit-btn" disabled>
+                                            Start Analysis with FASTQ Files
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Visualization Tab -->
+                    <div class="tab-pane fade" id="visualization-content" role="tabpanel" aria-labelledby="visualization-tab">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>Visualize BAM Files with IGV</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info">
+                                    <strong>Note:</strong> Upload a BAM file (and its index .bai file) to visualize with IGV.
+                                </div>
+                                
+                                <div class="alert alert-warning">
+                                    <h5><i class="bi bi-exclamation-triangle"></i> BAM File Requirements</h5>
+                                    <ul>
+                                        <li><strong>Must be a valid BAM file</strong> - Files may become corrupted during upload, especially large files</li>
+                                        <li><strong>Must be coordinate-sorted</strong> - Use <code>samtools sort input.bam -o sorted.bam</code> to sort your BAM</li>
+                                        <li><strong>Recommended to include a BAI index file</strong> - Create with <code>samtools index sorted.bam</code></li>
+                                        <li><strong>For large BAMs (>100MB)</strong> - Consider subsetting to a specific region first</li>
+                                    </ul>
+                                    <p class="mb-0">If you encounter "EOF block missing" errors, your BAM file may be truncated. Try uploading a smaller file or use the desktop IGV application.</p>
+                                </div>
+                                
+                                <form id="visualization-form" action="/visualize_bam" method="post" enctype="multipart/form-data">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="upload-area" id="bam-visual-area">
+                                                <label for="bam-visual-file" class="file-label">
+                                                    <h4>BAM File</h4>
+                                                    <p>Click to browse files</p>
+                                                    <p class="text-muted">Supported format: .bam</p>
+                                                    <div class="file-name" id="bam-visual-name"></div>
+                                                </label>
+                                                <input type="file" name="bam_file" id="bam-visual-file" class="file-input">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="upload-area" id="bai-upload-area">
+                                                <label for="bai-file" class="file-label">
+                                                    <h4>BAM Index File (optional)</h4>
+                                                    <p>Click to browse files</p>
+                                                    <p class="text-muted">Supported format: .bai</p>
+                                                    <div class="file-name" id="bai-file-name"></div>
+                                                </label>
+                                                <input type="file" name="bai_file" id="bai-file" class="file-input">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div id="bam-visual-progress" class="mt-4" style="display: none;">
+                                        <h5>Uploading BAM file... This may take several minutes.</h5>
+                                        <div class="progress">
+                                            <div id="bam-visual-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"></div>
+                                        </div>
+                                        <div id="bam-visual-status" class="mt-2 text-center"></div>
+                                    </div>
+                                    
+                                    <div class="d-grid gap-2">
+                                        <button type="submit" class="btn btn-primary mt-3" id="bam-visual-btn" disabled>
+                                            Visualize BAM File with IGV
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Continue Analysis Tab -->
+                    <div class="tab-pane fade" id="continue-content" role="tabpanel" aria-labelledby="continue-tab">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>Continue Existing Analysis</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info">
+                                    <strong>Note:</strong> Enter your analysis ID to automatically continue from where you left off. The system will detect the next step in the pipeline.
+                                </div>
+                                
+                                <form id="continue-form" action="/continue_analysis" method="post">
+                                    <div class="mb-3">
+                                        <label for="analysis-id" class="form-label">Analysis ID</label>
+                                        <input type="text" class="form-control" id="analysis-id" name="analysis_id" required placeholder="e.g., 67a8386b-9a21-4bb9-b9ea-ac24b18c79dd">
+                                        <div class="form-text">This is the unique identifier for your analysis, found in the URL of your results page.</div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">Optional: Select Specific Step (Advanced)</label>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="continue_step" id="step-auto" value="" checked>
+                                            <label class="form-check-label" for="step-auto">
+                                                <strong>Auto-detect next step</strong> (recommended)
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="continue_step" id="step-sam2bam" value="sam2bam">
+                                            <label class="form-check-label" for="step-sam2bam">
+                                                Convert SAM → BAM (Step 5)
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="continue_step" id="step-sort" value="sort">
+                                            <label class="form-check-label" for="step-sort">
+                                                Sort BAM (Step 6)
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="continue_step" id="step-dedup" value="dedup">
+                                            <label class="form-check-label" for="step-dedup">
+                                                Mark Duplicates (Step 7)
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="continue_step" id="step-bqsr" value="bqsr">
+                                            <label class="form-check-label" for="step-bqsr">
+                                                Base Recalibration (Step 9)
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="continue_step" id="step-variants" value="variants">
+                                            <label class="form-check-label" for="step-variants">
+                                                Variant Calling (Step 10)
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="continue_step" id="step-filter" value="filter">
+                                            <label class="form-check-label" for="step-filter">
+                                                Variant Filtering (Step 11)
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="continue_step" id="step-annotate" value="annotate">
+                                            <label class="form-check-label" for="step-annotate">
+                                                Variant Annotation (Step 12)
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="continue_step" id="step-compress" value="compress">
+                                            <label class="form-check-label" for="step-compress">
+                                                VCF Compression (Step 13)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="d-grid gap-2">
+                                        <button type="submit" class="btn btn-primary">
+                                            Continue Analysis
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- VCF File Tab -->
+                    <div class="tab-pane fade" id="vcf-content" role="tabpanel" aria-labelledby="vcf-tab">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>Upload VCF File</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info">
+                                    <strong>Note:</strong> Upload a VCF file to skip directly to viewing results.
+                                </div>
+                                
+                                <form id="vcf-upload-form" action="/upload_vcf" method="post" enctype="multipart/form-data">
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <div class="upload-area" id="vcf-upload-area">
+                                                <label for="vcf-file" class="file-label">
+                                                    <h4>VCF File</h4>
+                                                    <p>Click to browse files</p>
+                                                    <p class="text-muted">Supported format: .vcf</p>
+                                                    <div class="file-name" id="vcf-file-name"></div>
+                                                </label>
+                                                <input type="file" name="vcf_file" id="vcf-file" class="file-input">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div id="vcf-upload-progress" class="mt-4" style="display: none;">
+                                        <h5>Uploading VCF file... This may take a moment.</h5>
+                                        <div class="progress">
+                                            <div id="vcf-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"></div>
+                                        </div>
+                                        <div id="vcf-upload-status" class="mt-2 text-center"></div>
+                                    </div>
+                                    
+                                    <div class="d-grid gap-2">
+                                        <button type="submit" class="btn btn-primary mt-3" id="vcf-submit-btn" disabled>
+                                            Process VCF File
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5>About This Tool</h5>
+                    </div>
+                    <div class="card-body">
+                        <p>This web application performs exome analysis with multiple input options:</p>
+                        <ul>
+                            <li><strong>FASTQ Files:</strong> Full pipeline including quality control, trimming, alignment, duplicate marking, base recalibration, and variant calling with filtering and annotation</li>
+                            <li><strong>Visualization:</strong> View aligned reads in BAM files using IGV (Integrative Genomics Viewer)</li>
+                            <li><strong>VCF File:</strong> View and download variant results</li>
+                            <li><strong>Continue Analysis:</strong> Resume from any step in the pipeline</li>
+                        </ul>
+                        <p>The complete pipeline includes 14 distinct steps:</p>
+                        <ol>
+                            <li><strong>FASTQ Upload:</strong> Upload and prepare raw sequencing data</li>
+                            <li><strong>Quality Check:</strong> Using FastQC to analyze sequence quality</li>
+                            <li><strong>Trimming:</strong> Using fastp to trim low-quality bases and adapters</li>
+                            <li><strong>Alignment:</strong> Using BWA to align reads to the human reference genome (hg19)</li>
+                            <li><strong>Convert SAM → BAM:</strong> Converting SAM alignment to binary BAM format</li>
+                            <li><strong>Sort BAM:</strong> Sorting BAM file by coordinates for efficient access</li>
+                            <li><strong>Mark Duplicates:</strong> Using Picard MarkDuplicates to mark PCR duplicates</li>
+                            <li><strong>Index BAM:</strong> Creating index for fast access to BAM regions</li>
+                            <li><strong>Base Recalibration:</strong> Using GATK BaseRecalibrator to improve base quality scores</li>
+                            <li><strong>Variant Calling:</strong> Using GATK HaplotypeCaller to identify variants</li>
+                            <li><strong>Variant Filtering:</strong> Applying quality and depth filters to variants</li>
+                            <li><strong>Variant Annotation:</strong> Adding functional annotations to variants when available</li>
+                            <li><strong>VCF Compression:</strong> Compressing and indexing VCF file for efficient storage</li>
+                            <li><strong>Output VCF:</strong> Finalizing and preparing variant call file</li>
+                        </ol>
+                        <p>The final output is a VCF file containing the detected variants, with options for filtered, annotated, and compressed versions.</p>
+                        
+                        <div class="alert alert-info mt-3">
+                            <h5><i class="bi bi-info-circle-fill me-2"></i> Key Features</h5>
+                            <ul class="feature-list mt-3">
+                                <li><i class="bi bi-check-circle-fill"></i> <strong>Improved Duplicate Marking:</strong> Using standalone Picard tool for better compatibility</li>
+                                <li><i class="bi bi-check-circle-fill"></i> <strong>Base Quality Score Recalibration (BQSR):</strong> Improves variant calling accuracy by adjusting base quality scores</li>
+                                <li><i class="bi bi-check-circle-fill"></i> <strong>Variant Filtering:</strong> Removes low-quality variants based on quality score, depth, and other metrics</li>
+                                <li><i class="bi bi-check-circle-fill"></i> <strong>Variant Annotation:</strong> Adds functional information to variants when annotation databases are available</li>
+                                <li><i class="bi bi-check-circle-fill"></i> <strong>Automatic Step Detection:</strong> When continuing analysis, the system automatically detects which files are available and continues from the appropriate step</li>
+                                <li><i class="bi bi-check-circle-fill"></i> <strong>File Validation:</strong> Checks throughout the pipeline to ensure files are properly formatted</li>
+                            </ul>
+                        </div>
+                        
+                        <hr>
+                        <p><strong>Note on IGV:</strong> For detailed visualization of BAM files outside the web interface, we recommend installing the desktop version of IGV. Run <code>./setup_igv.sh</code> in the project directory to install IGV.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // File upload handling with debugging info
+        document.getElementById('r1-file').addEventListener('change', function() {
+            displayFileName('r1-file', 'r1-file-name');
+            updateDebugInfo();
+            checkFiles();
+        });
+        
+        document.getElementById('r2-file').addEventListener('change', function() {
+            displayFileName('r2-file', 'r2-file-name');
+            updateDebugInfo();
+            checkFiles();
+        });
+        
+        // BAM visualization file upload handling
+        document.getElementById('bam-visual-file').addEventListener('change', function() {
+            displayFileName('bam-visual-file', 'bam-visual-name');
+            checkBamVisualFile();
+        });
+        
+        // BAI file upload handling
+        document.getElementById('bai-file').addEventListener('change', function() {
+            displayFileName('bai-file', 'bai-file-name');
+            checkBamVisualFile();
+        });
+        
+        // VCF file upload handling
+        document.getElementById('vcf-file').addEventListener('change', function() {
+            displayFileName('vcf-file', 'vcf-file-name');
+            checkVcfFile();
+        });
+        
+        function displayFileName(inputId, displayId) {
+            const input = document.getElementById(inputId);
+            const display = document.getElementById(displayId);
+            
+            if (input.files.length > 0) {
+                display.textContent = input.files[0].name;
+            } else {
+                display.textContent = '';
+            }
+        }
+        
+        function updateDebugInfo() {
+            const r1Input = document.getElementById('r1-file');
+            const r2Input = document.getElementById('r2-file');
+            const submitBtn = document.getElementById('submit-btn');
+            
+            document.getElementById('r1-status').textContent = r1Input.files.length > 0 ? 'Yes - ' + r1Input.files[0].name : 'No';
+            document.getElementById('r2-status').textContent = r2Input.files.length > 0 ? 'Yes - ' + r2Input.files[0].name : 'No';
+            document.getElementById('button-status').textContent = submitBtn.disabled ? 'Disabled' : 'Enabled';
+        }
+        
+        function checkFiles() {
+            const r1Input = document.getElementById('r1-file');
+            const r2Input = document.getElementById('r2-file');
+            const submitBtn = document.getElementById('submit-btn');
+            
+            if (r1Input.files.length > 0 && r2Input.files.length > 0) {
+                submitBtn.disabled = false;
+            } else {
+                submitBtn.disabled = true;
+            }
+            updateDebugInfo();
+        }
+        
+        function checkBamVisualFile() {
+            const bamInput = document.getElementById('bam-visual-file');
+            const submitBtn = document.getElementById('bam-visual-btn');
+            
+            submitBtn.disabled = !(bamInput.files.length > 0);
+        }
+        
+        function checkVcfFile() {
+            const vcfInput = document.getElementById('vcf-file');
+            const submitBtn = document.getElementById('vcf-submit-btn');
+            
+            submitBtn.disabled = !(vcfInput.files.length > 0);
+        }
+        
+        // Form submission handling with progress bar
+        document.getElementById('upload-form').addEventListener('submit', function(e) {
+            // Show progress bar
+            document.getElementById('upload-progress').style.display = 'block';
+            document.getElementById('submit-btn').disabled = true;
+            
+            // Set initial progress
+            const progressBar = document.getElementById('progress-bar');
+            const statusText = document.getElementById('upload-status');
+            
+            // Simulate progress for large files
+            let progress = 0;
+            const interval = setInterval(function() {
+                progress += 1;
+                if (progress <= 98) {
+                    progressBar.style.width = progress + '%';
+                    statusText.textContent = 'Uploading: ' + progress + '%';
+                } else {
+                    clearInterval(interval);
+                }
+            }, 1000);
+        });
+        
+        // BAM visualization form submission
+        document.getElementById('visualization-form').addEventListener('submit', function(e) {
+            // Show progress bar
+            document.getElementById('bam-visual-progress').style.display = 'block';
+            document.getElementById('bam-visual-btn').disabled = true;
+            
+            // Set initial progress
+            const progressBar = document.getElementById('bam-visual-progress-bar');
+            const statusText = document.getElementById('bam-visual-status');
+            
+            // Simulate progress for large files
+            let progress = 0;
+            const interval = setInterval(function() {
+                progress += 1;
+                if (progress <= 98) {
+                    progressBar.style.width = progress + '%';
+                    statusText.textContent = 'Uploading: ' + progress + '%';
+                } else {
+                    clearInterval(interval);
+                }
+            }, 1000);
+        });
+        
+        // VCF form submission
+        document.getElementById('vcf-upload-form').addEventListener('submit', function(e) {
+            // Show progress bar
+            document.getElementById('vcf-upload-progress').style.display = 'block';
+            document.getElementById('vcf-submit-btn').disabled = true;
+            
+            // Set initial progress
+            const progressBar = document.getElementById('vcf-progress-bar');
+            const statusText = document.getElementById('vcf-upload-status');
+            
+            // Simulate progress for large files
+            let progress = 0;
+            const interval = setInterval(function() {
+                progress += 2;
+                if (progress <= 98) {
+                    progressBar.style.width = progress + '%';
+                    statusText.textContent = 'Uploading: ' + progress + '%';
+                } else {
+                    clearInterval(interval);
+                }
+            }, 500);
+        });
+        
+        // Initial debug info update
+        updateDebugInfo();
+    </script>
+</body>
+</html> 

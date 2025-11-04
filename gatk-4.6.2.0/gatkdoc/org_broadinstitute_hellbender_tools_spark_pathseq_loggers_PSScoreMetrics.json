@@ -1,0 +1,10 @@
+{
+  "summary": "Metrics",
+  "arguments": [],
+  "description": "Metrics that are calculated during the PathSeq scoring",
+  "name": "PSScoreMetrics",
+  "group": "Metrics",
+  "beta": false,
+  "experimental": false,
+  "deprecated": false
+}

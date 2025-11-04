@@ -1,0 +1,143 @@
+<?php
+
+    include '../../../common/include/common.php';
+    include_once '../../config.php';
+    $module = modules::GATK;
+    printHeader($module, $name, topSN::guide);
+?>
+
+<link type='text/css' rel='stylesheet' href='gatkDoc.css'>
+
+<div class='row-fluid' id="top">
+
+	
+	<?php $group = 'Metrics'; ?>
+
+	<section class="span4">
+		<aside class="well">
+			<a href="index.html"><h4><i class='fa fa-chevron-left'></i> Back to Tool Docs Index</h4></a>
+		</aside>
+		<?php getForumPosts( 'VariantCallingSummaryMetrics' ) ?>
+
+	</section>
+
+	<div class="span8">
+
+		<h1>VariantCallingSummaryMetrics</h1>
+
+		<p class="lead">Metrics</p>
+
+			<h3>Category
+				<small> Metrics</small>
+			</h3>
+		<hr>
+		<h2>Overview</h2>
+		A collection of metrics relating to snps and indels within a variant-calling file (VCF).
+
+				<p>This table summarizes the values that are specific to this metric.</p>
+				<table class="table table-striped table-bordered table-condensed">
+					<thead>
+					<tr>
+						<th>Metric</th>
+						<th>Summary</th>
+					</tr>
+					</thead>
+					<tr>
+						<td>TOTAL_SNPS<br />
+						<td>The number of passing bi-allelic SNPs calls (i.e. non-reference genotypes) that were examined</td>
+					</tr>
+					<tr>
+						<td>NUM_IN_DB_SNP<br />
+						<td>The number of passing bi-allelic SNPs found in dbSNP</td>
+					</tr>
+					<tr>
+						<td>NOVEL_SNPS<br />
+						<td>The number of passing bi-allelic SNPS called that were not found in dbSNP</td>
+					</tr>
+					<tr>
+						<td>FILTERED_SNPS<br />
+						<td>The number of SNPs that are filtered</td>
+					</tr>
+					<tr>
+						<td>PCT_DBSNP<br />
+						<td>The fraction of passing bi-allelic SNPs in dbSNP</td>
+					</tr>
+					<tr>
+						<td>DBSNP_TITV<br />
+						<td>The Transition/Transversion ratio of the passing bi-allelic SNP calls made at dbSNP sites</td>
+					</tr>
+					<tr>
+						<td>NOVEL_TITV<br />
+						<td>The Transition/Transversion ratio of the passing bi-allelic SNP calls made at non-dbSNP sites</td>
+					</tr>
+					<tr>
+						<td>TOTAL_INDELS<br />
+						<td>The number of passing indel calls that were examined</td>
+					</tr>
+					<tr>
+						<td>NOVEL_INDELS<br />
+						<td>The number of passing indels called that were not found in dbSNP</td>
+					</tr>
+					<tr>
+						<td>FILTERED_INDELS<br />
+						<td>The number of indels that are filtered</td>
+					</tr>
+					<tr>
+						<td>PCT_DBSNP_INDELS<br />
+						<td>The fraction of passing indels in dbSNP</td>
+					</tr>
+					<tr>
+						<td>NUM_IN_DB_SNP_INDELS<br />
+						<td>The number of passing indels found in dbSNP</td>
+					</tr>
+					<tr>
+						<td>DBSNP_INS_DEL_RATIO<br />
+						<td>The Insertion/Deletion ratio of the indel calls made at dbSNP sites</td>
+					</tr>
+					<tr>
+						<td>NOVEL_INS_DEL_RATIO<br />
+						<td>The Insertion/Deletion ratio of the indel calls made at non-dbSNP sites</td>
+					</tr>
+					<tr>
+						<td>TOTAL_MULTIALLELIC_SNPS<br />
+						<td>The number of passing multi-allelic SNP calls that were examined</td>
+					</tr>
+					<tr>
+						<td>NUM_IN_DB_SNP_MULTIALLELIC<br />
+						<td>The number of passing multi-allelic SNPs found in dbSNP</td>
+					</tr>
+					<tr>
+						<td>TOTAL_COMPLEX_INDELS<br />
+						<td>The number of passing complex indel calls that were examined</td>
+					</tr>
+					<tr>
+						<td>NUM_IN_DB_SNP_COMPLEX_INDELS<br />
+						<td>The number of passing complex indels found in dbSNP</td>
+					</tr>
+					<tr>
+						<td>SNP_REFERENCE_BIAS<br />
+						<td>The rate at which reference bases are observed at ref/alt heterozygous SNP sites.</td>
+					</tr>
+					<tr>
+						<td>NUM_SINGLETONS<br />
+						<td>For summary metrics, the number of variants that appear in only one sample.
+ For detail metrics, the number of variants that appear only in the current sample.</td>
+					</tr>
+					</tbody>
+				</table>
+
+        <hr>
+        <p><a href='#top'><i class='fa fa-chevron-up'></i> Return to top</a></p>
+        <hr>
+        <p class="see-also">See also 
+        	<a href="https://software.broadinstitute.org/gatk/documentation/">General Documentation</a> |
+        	<a class="hide_me_php" href="index.html">Tool Docs Index</a> <a class="hide_me_html" href="index">Tool Documentation Index</a> |
+        	<a href="https://gatkforums.broadinstitute.org/gatk/">Support Forum</a>
+        </p>
+
+        <p class="version">GATK version 4.6.2.0 built at Sun, 13 Apr 2025 13:21:43 -0400.
+        </p>
+
+	</div>
+
+	<?php printFooter($module); ?>

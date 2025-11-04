@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis Status | Exome Analysis Pipeline</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css">
+    <style>
+        body {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+        #log-container {
+            max-height: 400px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            padding: 1rem;
+            font-family: monospace;
+            white-space: pre-wrap;
+            margin-top: 1rem;
+        }
+        .results-container {
+            margin-top: 2rem;
+        }
+        .spinner-container {
+            margin: 2rem 0;
+            text-align: center;
+        }
+        .step-card {
+            margin-bottom: 1rem;
+            transition: all 0.3s;
+        }
+        .step-card.pending {
+            border-left: 5px solid #6c757d;
+        }
+        .step-card.running {
+            border-left: 5px solid #007bff;
+            box-shadow: 0 0 10px rgba(0, 123, 255, 0.3);
+        }
+        .step-card.complete {
+            border-left: 5px solid #28a745;
+        }
+        .step-card.error {
+            border-left: 5px solid #dc3545;
+        }
+        .step-icon {
+            font-size: 1.5rem;
+            margin-right: 1rem;
+        }
+        .step-status {
+            font-weight: bold;
+        }
+        .status-pending {
+            color: #6c757d;
+        }
+        .status-running {
+            color: #007bff;
+        }
+        .status-complete {
+            color: #28a745;
+        }
+        .status-error {
+            color: #dc3545;
+        }
+        .pipeline-progress {
+            height: 8px;
+            margin-bottom: 2rem;
+        }
+        .result-link {
+            margin-top: 0.5rem;
+        }
+        .step-progress {
+            height: 5px;
+            margin-top: 8px;
+            margin-bottom: 0;
+        }
+        .step-percent {
+            font-size: 0.8rem;
+            margin-left: 0.5rem;
+        }
+        .step-note {
+            font-style: italic;
+            color: #666;
+            font-size: 0.85rem;
+            margin-top: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row">
+            <div class="col-md-12">
+                <h1 class="text-center mb-4">Exome Analysis Status</h1>
+                
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Analysis ID: {{ analysis_id }}</h5>
+                        <div id="overall-status" class="badge bg-primary">Processing</div>
+                    </div>
+                    <div class="card-body">
+                        <h6>Pipeline Progress:</h6>
+                        <div class="progress pipeline-progress">
+                            <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                        </div>
+                        
+                        <div id="pipeline-steps">
+                            <!-- Steps will be dynamically populated here -->
+                            <div class="text-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Log</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="log-container"></div>
+                    </div>
+                </div>
+                
+                <div id="results-section" class="results-container" style="display: none;">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Results</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-success">
+                                <h5><i class="bi bi-check-circle-fill"></i> Analysis Complete!</h5>
+                                <p>Your exome analysis has been completed successfully. You can download the results below.</p>
+                            </div>
+                            
+                            <h6>Downloads:</h6>
+                            <ul class="list-group">
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    Variants (VCF)
+                                    <a href="/download/{{ analysis_id }}/variants.vcf" class="btn btn-primary btn-sm" target="_blank">Download</a>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    Filtered Variants
+                                    <a href="/download/{{ analysis_id }}/filtered/filtered_variants.vcf" class="btn btn-primary btn-sm" target="_blank">Download</a>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    Annotated Variants
+                                    <a href="/download/{{ analysis_id }}/annotated/annotated_variants.vcf" class="btn btn-primary btn-sm" target="_blank">Download</a>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    Compressed VCF
+                                    <a href="/download/{{ analysis_id }}/compressed/variants.vcf.gz" class="btn btn-primary btn-sm" target="_blank">Download</a>
+                                </li>
+                                <li class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        FastQC Reports
+                                    </div>
+                                    <div class="d-flex justify-content-end gap-2">
+                                        <a href="/download/{{ analysis_id }}/fastqc/r1_fastqc.html" class="btn btn-primary btn-sm" target="_blank">View R1 Report</a>
+                                        <a href="/download/{{ analysis_id }}/fastqc/r2_fastqc.html" class="btn btn-primary btn-sm" target="_blank">View R2 Report</a>
+                                    </div>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    Trimming Report
+                                    <a href="/download/{{ analysis_id }}/trimmed/fastp_report.html" class="btn btn-primary btn-sm" target="_blank">View</a>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    Duplicate Metrics
+                                    <a href="/download/{{ analysis_id }}/dedup/sample_{{ analysis_id }}.dedup.metrics.txt" class="btn btn-primary btn-sm" target="_blank">View</a>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    Variant Summary
+                                    <a href="/download/{{ analysis_id }}/variant_summary.txt" class="btn btn-primary btn-sm" target="_blank">View</a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5>About This Tool</h5>
+                    </div>
+                    <div class="card-body">
+                        <p>This web application performs exome analysis on paired-end sequencing data. The complete pipeline includes:</p>
+                        <ol>
+                            <li><strong>FASTQ Upload:</strong> Upload and prepare raw sequencing data</li>
+                            <li><strong>Quality Check:</strong> Using FastQC to analyze sequence quality</li>
+                            <li><strong>Trimming:</strong> Using fastp to trim low-quality bases and adapters</li>
+                            <li><strong>Alignment:</strong> Using BWA to align reads to the human reference genome (hg19)</li>
+                            <li><strong>Convert SAM → BAM:</strong> Converting SAM alignment to binary BAM format</li>
+                            <li><strong>Sort BAM:</strong> Sorting BAM file by coordinates for efficient access</li>
+                            <li><strong>Mark Duplicates:</strong> Using Picard MarkDuplicates to mark duplicate reads</li>
+                            <li><strong>Index BAM:</strong> Creating index for fast access to BAM regions</li>
+                            <li><strong>Base Recalibration:</strong> Using GATK BaseRecalibrator to improve base quality scores</li>
+                            <li><strong>Variant Calling:</strong> Using GATK HaplotypeCaller to identify variants</li>
+                            <li><strong>Variant Filtering:</strong> Applying quality and depth filters to variants</li>
+                            <li><strong>Variant Annotation:</strong> Adding functional annotations to variants</li>
+                            <li><strong>VCF Compression:</strong> Compressing and indexing VCF file</li>
+                            <li><strong>Output VCF:</strong> Finalizing and preparing variant call file</li>
+                        </ol>
+                        <p>You can continue analysis from any step if it was interrupted:</p>
+                        <ul>
+                            <li><strong>FASTQ Files:</strong> Start with raw sequencing data (full pipeline)</li>
+                            <li><strong>Continue Analysis:</strong> Resume from any step where analysis was previously completed</li>
+                            <li><strong>Visualization:</strong> View aligned reads with IGV browser</li>
+                            <li><strong>VCF File:</strong> Directly view and analyze variant calls</li>
+                        </ul>
+                        <p>The final output is a VCF file containing the detected variants.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Step card template -->
+    <template id="step-template">
+        <div class="card step-card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <span class="step-icon"></span>
+                    <div class="flex-grow-1">
+                        <h5 class="card-title step-name"></h5>
+                        <p class="card-text step-description"></p>
+                        <div class="d-flex align-items-center">
+                            <div class="step-status"></div>
+                            <span class="step-percent"></span>
+                        </div>
+                        <div class="step-note"></div>
+                        <div class="progress step-progress">
+                            <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                        </div>
+                        <div class="result-link"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+    
+    <script>
+        // Analysis ID from the server
+        const analysisId = "{{ analysis_id }}";
+        let lastLogLength = 0;
+        let refreshInterval;
+        
+        // Step status icons
+        const statusIcons = {
+            'pending': '<i class="bi bi-hourglass"></i>',
+            'running': '<i class="bi bi-arrow-repeat"></i>',
+            'complete': '<i class="bi bi-check-circle-fill"></i>',
+            'skipped': '<i class="bi bi-skip-forward-fill"></i>',
+            'error': '<i class="bi bi-exclamation-triangle-fill"></i>'
+        };
+        
+        // Step status labels
+        const statusLabels = {
+            'pending': 'Pending',
+            'running': 'Running...',
+            'complete': 'Complete',
+            'skipped': 'Skipped',
+            'error': 'Failed'
+        };
+        
+        // Function to update the progress
+        function updateProgress() {
+            fetch(`/api/status/${analysisId}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Update log
+                    const logContainer = document.getElementById('log-container');
+                    if (data.log && data.log.length > lastLogLength) {
+                        logContainer.innerHTML = data.log;
+                        lastLogLength = data.log.length;
+                        logContainer.scrollTop = logContainer.scrollHeight;
+                    }
+                    
+                    // Update progress data
+                    if (data.progress && data.progress.steps) {
+                        const pipelineSteps = document.getElementById('pipeline-steps');
+                        const template = document.getElementById('step-template');
+                        
+                        // Clear steps first time
+                        if (pipelineSteps.querySelector('.spinner-border')) {
+                            pipelineSteps.innerHTML = '';
+                        }
+                        
+                        // Calculate overall progress
+                        let totalPercent = 0;
+                        let completedSteps = 0;
+                        const totalSteps = data.progress.steps.length;
+                        
+                        data.progress.steps.forEach(step => {
+                            // Add completed or skipped steps to the count
+                            if (step.status === 'complete' || step.status === 'skipped') {
+                                completedSteps++;
+                                totalPercent += 100;
+                            } else if (step.status === 'running') {
+                                totalPercent += (step.percent || 0);
+                            }
+                            
+                            // Create or update step card
+                            let stepCard = document.getElementById(`step-${step.id}`);
+                            
+                            if (!stepCard) {
+                                // Clone template and create a new step card
+                                const clone = template.content.cloneNode(true);
+                                stepCard = clone.querySelector('.step-card');
+                                stepCard.id = `step-${step.id}`;
+                                pipelineSteps.appendChild(stepCard);
+                            }
+                            
+                            // Update status class
+                            stepCard.className = `card step-card ${step.status}`;
+                            
+                            // Update step content
+                            stepCard.querySelector('.step-name').textContent = step.name;
+                            stepCard.querySelector('.step-description').textContent = step.description;
+                            
+                            // Update icon and status text
+                            const iconElement = stepCard.querySelector('.step-icon');
+                            iconElement.innerHTML = statusIcons[step.status] || statusIcons.pending;
+                            
+                            const statusElement = stepCard.querySelector('.step-status');
+                            statusElement.textContent = statusLabels[step.status] || 'Unknown';
+                            statusElement.className = `step-status status-${step.status}`;
+                            
+                            // Update progress bar
+                            const progressBar = stepCard.querySelector('.progress-bar');
+                            progressBar.style.width = `${step.percent || 0}%`;
+                            
+                            // Update percent text
+                            const percentElement = stepCard.querySelector('.step-percent');
+                            if (step.status === 'running' || step.status === 'complete') {
+                                percentElement.textContent = `${step.percent || 0}%`;
+                            } else {
+                                percentElement.textContent = '';
+                            }
+                            
+                            // Update note if available
+                            const noteElement = stepCard.querySelector('.step-note');
+                            noteElement.textContent = step.note || '';
+                            
+                            // If step has output, add a link
+                            const linkElement = stepCard.querySelector('.result-link');
+                            if (step.output_file && step.status === 'complete') {
+                                // Special case for QC step - show links to both R1 and R2 reports
+                                if (step.id === 'qc') {
+                                    linkElement.innerHTML = `
+                                        <div class="d-flex gap-2 mt-2">
+                                            <a href="/download/${analysisId}/fastqc/r1_fastqc.html" class="btn btn-sm btn-outline-primary" target="_blank">View R1 Report</a>
+                                            <a href="/download/${analysisId}/fastqc/r2_fastqc.html" class="btn btn-sm btn-outline-primary" target="_blank">View R2 Report</a>
+                                        </div>`;
+                                }
+                                // Special case for trim step
+                                else if (step.id === 'trim') {
+                                    linkElement.innerHTML = `<a href="/download/${analysisId}/trimmed/fastp_report.html" class="btn btn-sm btn-outline-primary mt-2" target="_blank">View Trim Report</a>`;
+                                }
+                                // Default for other steps
+                                else {
+                                    linkElement.innerHTML = `<a href="/download/${analysisId}/${step.output_file}" class="btn btn-sm btn-outline-primary mt-2" target="_blank">View Output</a>`;
+                                }
+                            } else {
+                                linkElement.innerHTML = '';
+                            }
+                        });
+                        
+                        // Update overall progress
+                        const overallProgress = Math.round(totalPercent / totalSteps);
+                        document.getElementById('progress-bar').style.width = `${overallProgress}%`;
+                        
+                        // Update overall status
+                        const overallStatus = document.getElementById('overall-status');
+                        if (data.status === 'complete') {
+                            overallStatus.className = 'badge bg-success';
+                            overallStatus.textContent = 'Complete';
+                            
+                            // Show results section
+                            document.getElementById('results-section').style.display = 'block';
+                            
+                            // Stop refreshing
+                            if (refreshInterval) {
+                                clearInterval(refreshInterval);
+                                refreshInterval = null;
+                            }
+                        } else {
+                            overallStatus.className = 'badge bg-primary';
+                            overallStatus.textContent = `Processing (${overallProgress}%)`;
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching status:', error);
+                });
+        }
+        
+        // Initial update
+        updateProgress();
+        
+        // Set up refresh interval
+        refreshInterval = setInterval(updateProgress, 2000);
+    </script>
+</body>
+</html> 

@@ -1,0 +1,10 @@
+{
+  "summary": "Metrics",
+  "arguments": [],
+  "description": "Metrics class for outputs.",
+  "name": "CpcgMetrics",
+  "group": "Metrics",
+  "beta": false,
+  "experimental": false,
+  "deprecated": false
+}
