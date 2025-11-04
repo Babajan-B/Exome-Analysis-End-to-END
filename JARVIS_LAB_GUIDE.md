@@ -2,43 +2,101 @@
 
 Complete guide to run NGS Exome Analysis Pipeline on Jarvis Lab cloud instances with maximum speed.
 
-## 🚀 Recommended Instance Configuration
+---
 
-### **Option 1: Standard Analysis (Recommended)**
-- **Instance Type**: `gpu.2xlarge.1x3090` or `cpu.8xlarge`
-- **vCPUs**: 16+ cores
-- **RAM**: 32 GB
-- **Storage**: 100 GB SSD
-- **GPU**: Not required (CPU-only workflow)
-- **Cost**: ~$0.50-1.00/hour
-- **Estimated Time**: 1-2 hours for full exome
+## 🎯 **QUICK REFERENCE - Copy & Paste This!**
 
-### **Option 2: Fast Processing**
-- **Instance Type**: `cpu.16xlarge` or `cpu.24xlarge`
-- **vCPUs**: 32+ cores
-- **RAM**: 64 GB
-- **Storage**: 100 GB SSD
-- **Cost**: ~$1.50-2.50/hour
-- **Estimated Time**: 30-60 minutes for full exome
+### **In Jarvis Lab:**
+1. **Select Template**: **PyTorch** (only suitable option)
+2. **Instance Size**: 16 vCPU, 32 GB RAM, 100 GB Storage
+3. **Launch & Open Terminal**
 
-### **Option 3: Budget-Friendly**
-- **Instance Type**: `cpu.4xlarge`
-- **vCPUs**: 8 cores
-- **RAM**: 16 GB
-- **Storage**: 100 GB SSD
-- **Cost**: ~$0.25-0.50/hour
-- **Estimated Time**: 2-4 hours for full exome
+### **Command 1 - Setup (Run once, ~40 min):**
+```bash
+git clone https://github.com/Babajan-B/Exome-Analysis-End-to-END.git ~/NGS && cd ~/NGS && bash cloud_setup.sh
+```
+
+### **Command 2 - Upload Your Files:**
+```bash
+mkdir -p ~/NGS/data
+# Upload R1.fastq.gz and R2.fastq.gz to ~/NGS/data/ using JupyterLab upload
+```
+
+### **Command 3 - Run Pipeline (~1-2 hours):**
+```bash
+bash run_pipeline.sh data/R1.fastq.gz data/R2.fastq.gz my_sample 16
+```
+
+### **Download Results:**
+- Navigate to: `~/NGS/results/my_sample/annotated/`
+- Download: `annotated_variants.vcf.gz`
+
+**That's it! Just 3 commands!** ⚡
 
 ---
 
-## 📋 Quick Start - 3 Commands Only!
+## 🚀 Jarvis Lab Instance Selection
 
-### Step 1: Launch Jarvis Lab Instance
+### ⚠️ **Important: No Blank Ubuntu Template Available**
 
-1. Go to [Jarvis Labs](https://jarvislabs.ai/)
-2. Create new instance with recommended specs
-3. Select **Ubuntu 20.04 or 22.04**
-4. Launch and connect via SSH or JupyterLab terminal
+Since Jarvis Lab doesn't offer a blank Ubuntu option, we'll use the **PyTorch template** as the base.
+
+### **SELECT: PyTorch Template** ✅
+
+**Why PyTorch?**
+- ✅ Has Ubuntu 20.04/22.04 base
+- ✅ Pre-installed build tools (gcc, make)
+- ✅ Python already configured
+- ✅ We'll install bioinformatics tools on top
+- ⚠️ Ignore all the ML/GPU stuff (we don't need it)
+
+---
+
+## 💻 **Recommended Instance Configurations**
+
+### **Option 1: Standard Analysis (RECOMMENDED)** ⭐
+- **Template**: **PyTorch**
+- **Instance Size**: 16 vCPU, 32 GB RAM
+- **Storage**: 100-150 GB SSD
+- **GPU**: **Select CPU-only if available** (or smallest GPU if forced)
+- **Estimated Cost**: ~$0.80-1.20/hour
+- **Estimated Time**: **1-1.5 hours** for full exome
+
+### **Option 2: Fast Processing** ⚡
+- **Template**: **PyTorch**
+- **Instance Size**: 32 vCPU, 64 GB RAM
+- **Storage**: 150 GB SSD
+- **GPU**: CPU-only preferred
+- **Estimated Cost**: ~$1.50-2.00/hour
+- **Estimated Time**: **45-60 minutes** for full exome
+
+### **Option 3: Budget-Friendly** 💰
+- **Template**: **PyTorch**
+- **Instance Size**: 8 vCPU, 16 GB RAM
+- **Storage**: 100 GB SSD
+- **GPU**: CPU-only
+- **Estimated Cost**: ~$0.40-0.60/hour
+- **Estimated Time**: **2-3 hours** for full exome
+
+---
+
+## 📋 Quick Start - 3 Steps Only!
+
+### Step 1: Launch Jarvis Lab Instance with PyTorch Template
+
+1. **Go to**: [Jarvis Labs](https://jarvislabs.ai/) and sign in
+2. **Click**: "Create New Instance" or "Launch Instance"
+3. **Select Template**: **PyTorch** ⭐
+4. **Configure**:
+   - **vCPUs**: 16 (recommended) or 32 (faster)
+   - **RAM**: 32 GB minimum
+   - **Storage**: 100-150 GB SSD
+   - **GPU**: Select **CPU-only** if available, or **smallest/cheapest GPU** if forced
+5. **Launch** the instance
+6. **Connect**: Click "Open JupyterLab" or use SSH
+7. **Open Terminal**: In JupyterLab, click "Terminal" icon
+
+**Note**: We're using PyTorch template only for the Ubuntu base - we'll install bioinformatics tools ourselves.
 
 ---
 
