@@ -53,13 +53,31 @@ The following files are **NOT** included in the Git repository due to their size
 
 ### Quick Start
 
-Choose your operating system:
+Choose your platform:
 
+- **[Jarvis Lab Cloud Guide](JARVIS_LAB_GUIDE.md)** ⚡ - **FASTEST** - Cloud deployment (2 commands, 45-90 min)
 - **[Windows Installation Guide](docs/INSTALL_WINDOWS.md)** - Step-by-step instructions for Windows
 - **[macOS Installation Guide](docs/INSTALL_MAC.md)** - Step-by-step instructions for macOS
 - **[Linux Installation Guide](docs/INSTALL_LINUX.md)** - Step-by-step instructions for Linux
 
-### Quick Install (macOS/Linux)
+### ⚡ Quick Install (Jarvis Lab Cloud - FASTEST)
+
+**For high-performance cloud computing:**
+
+```bash
+# 1. Setup (single command)
+git clone https://github.com/Babajan-B/Exome-Analysis-End-to-END.git ~/NGS && \
+cd ~/NGS && bash cloud_setup.sh
+
+# 2. Run analysis (single command)
+bash run_pipeline.sh data/R1.fastq.gz data/R2.fastq.gz sample_name 16
+```
+
+**See [JARVIS_LAB_GUIDE.md](JARVIS_LAB_GUIDE.md) for complete cloud deployment guide.**
+
+---
+
+### Quick Install (macOS/Linux - Local)
 
 ```bash
 # Clone the repository
@@ -73,7 +91,7 @@ chmod +x setup.sh
 # Activate virtual environment
 source venv/bin/activate
 
-# Start the application
+# Start the web application
 python run.py
 ```
 
