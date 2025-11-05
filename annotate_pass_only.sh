@@ -68,8 +68,8 @@ perl $ANNOVAR_DIR/table_annovar.pl \
     -buildver hg19 \
     -out $OUTPUT_DIR/annovar/annotated_${SAMPLE_NAME}_PASS \
     -remove \
-    -protocol refGene,knownGene,ensGene,avsnp150,gnomad211_exome,clinvar_20240917,dbnsfp42a,cosmic70,icgc28 \
-    -operation g,g,g,f,f,f,f,f,f \
+    -protocol refGene,clinvar_20240917,gnomad211_exome,avsnp150,dbnsfp42a \
+    -operation g,f,f,f,f \
     -nastring . \
     -vcfinput \
     -polish
