@@ -21,11 +21,14 @@ sudo apt-get install -y -qq \
     curl \
     git \
     unzip \
-    default-jre \
-    default-jdk \
+    openjdk-17-jdk \
+    openjdk-17-jre \
     python3-pip \
     python3-venv \
     parallel
+
+# Set Java 17 as default (required for GATK 4.6.2.0+)
+sudo update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java 2>/dev/null || true
 
 # Install bioinformatics tools
 echo "[3/8] Installing bioinformatics tools..."
