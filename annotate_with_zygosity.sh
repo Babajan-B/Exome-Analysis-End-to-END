@@ -78,8 +78,16 @@ echo ""
 echo "Step 3: Adding zygosity information..."
 
 # Create Python script to add zygosity
-python3 << 'PYTHON_SCRIPT'
+VCF_FOR_PY="$PASS_VCF"
+ANNOT_FOR_PY="$OUTPUT_DIR/annovar/annotated_${SAMPLE_NAME}.hg19_multianno.txt"
+OUTPUT_FOR_PY="$OUTPUT_DIR/annovar/annotated_${SAMPLE_NAME}_with_zygosity.hg19_multianno.txt"
+
+python3 - "$VCF_FOR_PY" "$ANNOT_FOR_PY" "$OUTPUT_FOR_PY" << 'PYTHON_SCRIPT'
 import sys
+
+if len(sys.argv) < 4:
+    print("Error: Missing arguments")
+    sys.exit(1)
 
 vcf_file = sys.argv[1]
 annot_file = sys.argv[2]
@@ -146,10 +154,6 @@ with open(annot_file, 'r') as f_in, open(output_file, 'w') as f_out:
 print("  ✅ Zygosity column added")
 
 PYTHON_SCRIPT
-
-python3 - "$PASS_VCF" \
-    "$OUTPUT_DIR/annovar/annotated_${SAMPLE_NAME}.hg19_multianno.txt" \
-    "$OUTPUT_DIR/annovar/annotated_${SAMPLE_NAME}_with_zygosity.hg19_multianno.txt"
 
 if [ -f "$OUTPUT_DIR/annovar/annotated_${SAMPLE_NAME}_with_zygosity.hg19_multianno.txt" ]; then
     echo ""
