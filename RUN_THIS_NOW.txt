@@ -1,0 +1,101 @@
+╔════════════════════════════════════════════════════════════╗
+║         FIX LARGE FILES - RUN THIS IN JARVIS LAB          ║
+╚════════════════════════════════════════════════════════════╝
+
+Your files are TOO LARGE:
+  ❌ Current: 1.5-1.6 GB per sample
+  ✅ Should be: 60-100 MB per sample
+
+PROBLEM: Annotated ALL variants (including failed ones)
+SOLUTION: Re-annotate with PASS variants only
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 QUICK FIX (Copy & Paste in Jarvis Lab)
+
+┌────────────────────────────────────────────────────────────┐
+│ cd ~/NGS                                                   │
+│ git pull                                                   │
+│ bash cleanup_and_reannotate.sh                            │
+└────────────────────────────────────────────────────────────┘
+
+This will:
+  1. Remove old large files (1.5GB each)
+  2. Re-annotate with PASS variants only
+  3. Create files 90% smaller (60-100MB)
+  4. Take ~10 minutes total
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 WHAT TO EXPECT
+
+BEFORE (Current):
+  sample_Alaa:
+    - VCF: 1.5 GB (458,600 variants)
+    - TXT: 314 MB
+
+  sample_6:
+    - VCF: 1.6 GB (486,372 variants)
+    - TXT: 320 MB
+
+AFTER (Fixed):
+  sample_Alaa:
+    - VCF: 15 MB (30-60K variants) ✅
+    - TXT: 30 MB ✅
+
+  sample_6:
+    - VCF: 16 MB (30-60K variants) ✅
+    - TXT: 32 MB ✅
+
+Space saved: ~3.5 GB! (96% reduction)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📥 DOWNLOAD THESE NEW FILES
+
+After the fix completes, download:
+
+  results/sample_Alaa/annovar/
+    └─ annotated_sample_Alaa_PASS.hg19_multianno.txt (30MB) ⭐
+
+  results/sample_6/annovar/
+    └─ annotated_sample_6_PASS.hg19_multianno.txt (32MB) ⭐
+
+NOTE: Files now have "_PASS" in the name!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔍 VERIFY THE FIX
+
+Check variant counts:
+
+┌────────────────────────────────────────────────────────────┐
+│ # Count PASS variants (should be 30K-60K)                 │
+│ grep -v "^#" results/sample_Alaa/filtered/filtered_variants.vcf | grep -w "PASS" | wc -l
+│                                                            │
+│ # Check new file size                                     │
+│ du -h results/sample_Alaa/annovar/*_PASS.hg19_multianno.txt
+└────────────────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  WHY THIS HAPPENED
+
+Your pipeline called ~480,000 variants per sample.
+Normal exome: ~100,000 raw, ~30-60K after filtering.
+
+Possible reasons:
+  1. Including low-quality variants
+  2. Not filtering stringently enough
+  3. Reference genome issue
+
+The fix: Only annotate variants that PASS quality filters.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📖 MORE INFO
+
+See: FIX_LARGE_FILES.md for detailed explanation
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
