@@ -1,14 +1,33 @@
 # NGS Exome Analysis Pipeline - Web Application
 
-A comprehensive web-based application for processing and analyzing Next-Generation Sequencing (NGS) exome data. This tool provides an intuitive interface for uploading paired-end FASTQ files and running a complete exome analysis pipeline.
+A comprehensive web-based application for processing and analyzing Next-Generation Sequencing (NGS) exome data. This tool provides an intuitive interface for uploading paired-end FASTQ files and running a complete exome analysis pipeline with ANNOVAR annotation.
 
 [![Python](https://img.shields.io/badge/Python-3.7%2B-blue)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-2.0.1-green)](https://flask.palletsprojects.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+## ⚡ Quick Start (2 Commands!)
+
+**Install everything (once):**
+```bash
+git clone https://github.com/Babajan-B/Exome-Analysis-End-to-END.git ~/NGS
+cd ~/NGS
+bash install_all.sh
+```
+
+**Run complete analysis (includes ANNOVAR):**
+```bash
+bash run_complete_analysis.sh data/R1.fastq.gz data/R2.fastq.gz sample_name 16
+```
+
+**That's it!** Results in `results/sample_name/annovar/` - ready to download and open in Excel.
+
+---
+
 ## 🚀 Features
 
-- **User-Friendly Web Interface** - Simple drag-and-drop file upload
+- **Single-Command Installation** - Everything installed with one script
+- **Single-Command Analysis** - Full pipeline from FASTQ to annotated variants
 - **Complete Analysis Pipeline**:
   - ✅ Quality control using FastQC
   - ✅ Read trimming and filtering using fastp
@@ -17,9 +36,15 @@ A comprehensive web-based application for processing and analyzing Next-Generati
   - ✅ Duplicate marking using GATK MarkDuplicates
   - ✅ Base Quality Score Recalibration (BQSR)
   - ✅ Variant calling using GATK HaplotypeCaller
-  - ✅ Variant annotation using snpEff
+  - ✅ Variant filtering
+  - ✅ **Comprehensive variant annotation using ANNOVAR** 🆕
+  - ✅ Clinical databases (ClinVar, COSMIC)
+  - ✅ Population frequencies (gnomAD, ExAC)
+  - ✅ Functional predictions (SIFT, PolyPhen)
+- **User-Friendly Web Interface** - Simple drag-and-drop file upload
 - **Real-time Progress Tracking** - Monitor your analysis as it runs
 - **Interactive Visualization** - Built-in IGV.js browser for BAM file visualization
+- **Excel-Ready Output** - Tab-delimited annotation files
 - **Downloadable Results** - VCF files, QC reports, and more
 - **Multiple Input Options** - Support for FASTQ, BAM, and VCF files
 - **Resume Capability** - Continue interrupted analyses
@@ -51,16 +76,37 @@ The following files are **NOT** included in the Git repository due to their size
 
 ## 🛠️ Installation
 
-### Quick Start
+### ⚡ Quick Install (Jarvis Lab / Cloud - RECOMMENDED)
+
+**Single command installs everything:**
+
+```bash
+git clone https://github.com/Babajan-B/Exome-Analysis-End-to-END.git ~/NGS && \
+cd ~/NGS && \
+bash install_all.sh
+```
+
+**What gets installed:**
+- ✅ All bioinformatics tools (FastQC, BWA, SAMtools, GATK, etc.)
+- ✅ Reference genome (hg19) with indices
+- ✅ snpEff annotation database
+- ✅ **ANNOVAR with 9 clinical/research databases** 🆕
+- ⏱️ **Time: 45-60 minutes**
+- 💾 **Storage: ~15 GB**
+
+---
+
+### Other Installation Options
 
 Choose your platform:
 
-- **[Jarvis Lab Cloud Guide](JARVIS_LAB_GUIDE.md)** ⚡ - **FASTEST** - Cloud deployment (2 commands, 45-90 min)
+- **[Jarvis Lab Cloud Guide](JARVIS_LAB_GUIDE.md)** ⚡ - Detailed cloud deployment guide
+- **[ANNOVAR Setup](ANNOVAR_README.md)** 🆕 - ANNOVAR-specific documentation
 - **[Windows Installation Guide](docs/INSTALL_WINDOWS.md)** - Step-by-step instructions for Windows
 - **[macOS Installation Guide](docs/INSTALL_MAC.md)** - Step-by-step instructions for macOS
 - **[Linux Installation Guide](docs/INSTALL_LINUX.md)** - Step-by-step instructions for Linux
 
-### ⚡ Quick Install (Jarvis Lab Cloud - FASTEST)
+### ⚡ Quick Install (Legacy - Jarvis Lab Cloud)
 
 **For high-performance cloud computing:**
 
@@ -213,6 +259,37 @@ wget https://github.com/broadinstitute/picard/releases/download/2.27.5/picard.ja
 
 ## 🎯 Usage
 
+### Method 1: Command-Line (Recommended for Jarvis Lab)
+
+**Single command runs complete analysis:**
+
+```bash
+cd ~/NGS
+bash run_complete_analysis.sh \
+    data/R1.fastq.gz \
+    data/R2.fastq.gz \
+    patient_001 \
+    16
+```
+
+**Parameters:**
+- `R1.fastq.gz` - Forward reads
+- `R2.fastq.gz` - Reverse reads  
+- `patient_001` - Sample name
+- `16` - Number of threads (match your CPUs)
+
+**Output:**
+- Results in `results/patient_001/`
+- Annotated VCF: `results/patient_001/annovar/*.hg19_multianno.vcf`
+- Excel table: `results/patient_001/annovar/*.hg19_multianno.txt`
+- Summary: `results/patient_001/ANALYSIS_SUMMARY.txt`
+
+**Time:** 1-2 hours on 16 vCPU instance
+
+---
+
+### Method 2: Web Interface
+
 ### Starting the Server
 
 1. **Activate the virtual environment** (if not already activated):
@@ -226,15 +303,15 @@ wget https://github.com/broadinstitute/picard/releases/download/2.27.5/picard.ja
 
 2. **Start the Flask server**:
    ```bash
-   python run.py
-   ```
+python run.py
+```
 
 3. **Open your browser** and navigate to:
    ```
-   http://localhost:5008
+   http://localhost:5013
    ```
 
-### Running an Analysis
+### Running an Analysis via Web
 
 1. **Upload FASTQ Files**:
    - Click on the "Upload FASTQ Files" section
