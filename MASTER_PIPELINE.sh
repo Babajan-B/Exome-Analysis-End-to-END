@@ -59,8 +59,11 @@ detect_samples() {
     
     cd "$data_dir"
     
+    # Enable nullglob to handle no matches gracefully
+    shopt -s nullglob
+    
     # Find R1 files
-    for r1_file in *R1*.fastq.gz *R1*.fq.gz *_1.fastq.gz *_1.fq.gz 2>/dev/null; do
+    for r1_file in *R1*.fastq.gz *R1*.fq.gz *_1.fastq.gz *_1.fq.gz; do
         [ -f "$r1_file" ] || continue
         
         # Generate expected R2 filename
@@ -73,6 +76,9 @@ detect_samples() {
             SAMPLE_PAIRS["$sample_name"]="$data_dir/$r1_file,$data_dir/$r2_file"
         fi
     done
+    
+    # Disable nullglob
+    shopt -u nullglob
 }
 
 # Function to run complete analysis for one sample
