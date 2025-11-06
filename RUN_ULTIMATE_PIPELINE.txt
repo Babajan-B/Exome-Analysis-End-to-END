@@ -1,0 +1,95 @@
+╔════════════════════════════════════════════════════════════╗
+║         ULTIMATE MASTER PIPELINE - EVERYTHING IN ONE       ║
+╚════════════════════════════════════════════════════════════╝
+
+This is the COMPLETE end-to-end pipeline that does EVERYTHING:
+
+  ✅ Part 1: Core Pipeline (QC → Align → Variant Call → Filter)
+  ✅ Part 2: ANNOVAR Annotation (5 databases)
+  ✅ Part 3: snpEff Annotation
+  ✅ Part 4: Zygosity Information
+  ✅ Part 5: Functional Classification
+  ✅ Part 6: VCF Compression & Indexing
+  ✅ Part 7: Final ZIP Archive
+
+────────────────────────────────────────────────────────────
+
+SINGLE COMMAND TO RUN EVERYTHING:
+
+cd ~/NGS && \
+git pull origin refactor-pipeline-args-e5faR && \
+bash ULTIMATE_MASTER_PIPELINE.sh ~/NGS/data 16
+
+────────────────────────────────────────────────────────────
+
+What happens:
+────────────────────────────────────────────────────────────
+
+For each sample (automatically detected):
+
+1. Quality Control (FastQC)
+2. Trimming (fastp)
+3. Alignment (BWA)
+4. Sorting & Deduplication
+5. Variant Calling (GATK)
+6. Filtering (PASS only)
+7. ANNOVAR annotation (refGene, ClinVar, gnomAD, dbSNP, prediction scores)
+8. Basic separation (SNPs, Insertions, Deletions)
+9. snpEff annotation
+10. Add zygosity (Heterozygous/Homozygous)
+11. Functional classification:
+    - SNPs_Exonic.txt
+    - SNPs_NonExonic.txt
+    - Exonic_Nonsynonymous.txt
+    - Exonic_Synonymous.txt
+    - Exonic_Stopgain.txt
+    - Exonic_Frameshift.txt
+12. Compress VCFs (with tabix index for IGV)
+13. Create final ZIP archive
+
+────────────────────────────────────────────────────────────
+
+Timeline:
+────────────────────────────────────────────────────────────
+
+Per sample: ~2.5-3 hours
+3 samples total: ~7-9 hours
+
+────────────────────────────────────────────────────────────
+
+Final Output:
+────────────────────────────────────────────────────────────
+
+One ZIP file with everything:
+  ~/NGS/NGS_Results_Complete_[timestamp].zip
+
+Contents:
+  ✅ All annotation files (.txt) with zygosity
+  ✅ Compressed VCFs (ANNOVAR + snpEff)
+  ✅ VCF indices (.tbi for IGV)
+  ✅ Variant type separation files
+  ✅ Functional classification files
+  ✅ Quality reports (HTML)
+  ✅ snpEff summary reports
+  ✅ Complete analysis summary
+
+Size: ~400-600 MB (compressed, no BAM/FASTQ files)
+
+────────────────────────────────────────────────────────────
+
+Key Features:
+────────────────────────────────────────────────────────────
+
+✅ No intermediate steps needed - everything automated
+✅ Processes all samples sequentially (one completes → next starts)
+✅ Includes both ANNOVAR and snpEff annotations
+✅ VCFs ready for IGV viewing
+✅ Organized functional classifications for easy analysis
+✅ All essential files in one downloadable ZIP
+
+────────────────────────────────────────────────────────────
+
+Just run the command and come back when it's done!
+
+════════════════════════════════════════════════════════════
+
