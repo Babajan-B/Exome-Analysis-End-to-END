@@ -1,0 +1,77 @@
+╔════════════════════════════════════════════════════════════╗
+║         POST-PROCESSING: ADD snpEff + ADVANCED FEATURES    ║
+╚════════════════════════════════════════════════════════════╝
+
+Your basic pipeline completed successfully! ✅
+
+Now add the advanced features you requested:
+  1. snpEff annotation
+  2. Zygosity information (Heterozygous/Homozygous)
+  3. Functional classification (Exonic, Nonsynonymous, Synonymous, Stopgain)
+  4. Final ZIP archive with all results
+
+────────────────────────────────────────────────────────────
+
+STEP 1: Pull latest code
+────────────────────────────────────────────────────────────
+
+cd ~/NGS && \
+git pull origin refactor-pipeline-args-e5faR
+
+────────────────────────────────────────────────────────────
+
+STEP 2: Run post-processing
+────────────────────────────────────────────────────────────
+
+cd ~/NGS && \
+bash post_process_complete.sh
+
+────────────────────────────────────────────────────────────
+
+What it does:
+────────────────────────────────────────────────────────────
+
+For each sample (Ali, Fatema, Omar):
+
+✅ Runs snpEff annotation
+   → Creates: results/SAMPLE/annovar/snpeff/SAMPLE_snpEff_annotated.vcf
+   → Report: results/SAMPLE/annovar/snpeff/SAMPLE_snpEff_summary.html
+
+✅ Adds zygosity column (Heterozygous/Homozygous/Reference)
+   → Creates: results/SAMPLE/annovar/annotated_SAMPLE_with_zygosity.txt
+
+✅ Functional classification:
+   → SNPs_Exonic.txt
+   → SNPs_NonExonic.txt
+   → Exonic_Nonsynonymous.txt
+   → Exonic_Synonymous.txt
+   → Exonic_Stopgain.txt
+   → Exonic_Frameshift.txt
+
+✅ Creates final ZIP with all essential files
+   → ~/NGS/NGS_Results_Complete_[timestamp].zip
+
+────────────────────────────────────────────────────────────
+
+Timeline: ~15-30 minutes for all 3 samples
+
+────────────────────────────────────────────────────────────
+
+After completion:
+────────────────────────────────────────────────────────────
+
+Download the ZIP file:
+  ~/NGS/NGS_Results_Complete_*.zip
+
+This contains:
+  ✅ ANNOVAR annotations with zygosity
+  ✅ snpEff reports (HTML + CSV)
+  ✅ Variant type separation (SNPs, Insertions, Deletions)
+  ✅ Functional classification files
+  ✅ Quality control reports
+  ✅ Summary report
+
+Excludes large files (BAM, SAM, FASTQ, VCF) to keep size small!
+
+════════════════════════════════════════════════════════════
+
