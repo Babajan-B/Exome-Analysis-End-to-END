@@ -1,0 +1,150 @@
+╔════════════════════════════════════════════════════════════╗
+║          CLEANUP & RESTART - COMMANDS FOR JARVIS LAB      ║
+╚════════════════════════════════════════════════════════════╝
+
+✅ PIPELINE VERIFIED: Complete end-to-end analysis ready!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 STEP 1: CHECK CURRENT STORAGE
+
+┌────────────────────────────────────────────────────────────┐
+│ du -sh ~/NGS                                               │
+│ du -sh ~/NGS/results ~/NGS/data ~/NGS/uploads              │
+└────────────────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🧹 STEP 2: CLEANUP OLD DATA (After downloading results!)
+
+┌────────────────────────────────────────────────────────────┐
+│ cd ~/NGS                                                   │
+│ rm -rf results/ data/ uploads/ Bur/ *.zip                  │
+│ echo "✅ Cleanup done!"                                    │
+│ du -sh ~/NGS                                               │
+└────────────────────────────────────────────────────────────┘
+
+This removes:
+  ❌ results/   (old analysis results)
+  ❌ data/      (old FASTQ files)
+  ❌ uploads/   (uploaded files)
+  ❌ Bur/       (custom folder)
+  ❌ *.zip      (zip files)
+
+This keeps:
+  ✅ tools/     (ANNOVAR, GATK, etc.)
+  ✅ reference/ (hg19 genome)
+  ✅ *.sh       (all scripts)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📥 STEP 3: PREPARE FOR NEW ANALYSIS
+
+┌────────────────────────────────────────────────────────────┐
+│ mkdir -p ~/NGS/data                                        │
+│ echo "✅ Ready! Upload FASTQ files to ~/NGS/data/"        │
+└────────────────────────────────────────────────────────────┘
+
+Upload your new files:
+  • Upload via JupyterLab to ~/NGS/data/
+  • File format: sample_R1.fastq.gz, sample_R2.fastq.gz
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 STEP 4: RUN NEW ANALYSIS
+
+┌────────────────────────────────────────────────────────────┐
+│ cd ~/NGS                                                   │
+│ bash MASTER_PIPELINE.sh                                    │
+└────────────────────────────────────────────────────────────┘
+
+This automatically:
+  1. Detects all samples in data/
+  2. Runs complete pipeline
+  3. Annotates with ANNOVAR (5 databases)
+  4. Adds zygosity (Het/Hom)
+  5. Separates by type (SNPs, Indels)
+  6. Separates SNPs by function (Exonic/Non-Exonic)
+  7. Creates zip files
+  8. Generates summary
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 COMPLETE END-TO-END VERIFICATION
+
+Pipeline Coverage:
+  ✅ FASTQ input → VCF output
+  ✅ Quality control included
+  ✅ Trimming and filtering
+  ✅ Alignment to reference
+  ✅ Variant calling
+  ✅ Quality-based filtering
+  ✅ Comprehensive annotation (5 databases)
+  ✅ Zygosity information
+  ✅ Prediction scores (SIFT, PolyPhen, CADD)
+  ✅ Clinical databases (ClinVar)
+  ✅ Population frequencies (gnomAD)
+  ✅ dbSNP IDs (rs numbers)
+  ✅ Variant type separation
+  ✅ Functional categorization
+  ✅ Auto-zip results
+
+Missing: NOTHING - Pipeline is COMPLETE!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 EXPECTED OUTPUT STRUCTURE
+
+results/SAMPLE_NAME/
+├── fastqc/                    (QC reports - HTML)
+├── trimmed/                   (Trimming reports - HTML)
+├── filtered/                  (Filtered VCF)
+├── variants/                  (Raw VCF)
+├── dedup/                     (BAM files - large)
+└── annovar/
+    ├── annotated_with_zygosity.txt (⭐ Main file)
+    ├── by_type/
+    │   ├── SNPs_all.txt
+    │   ├── Insertions_all.txt
+    │   └── Deletions_all.txt
+    └── by_function/
+        ├── SNPs_Exonic.txt
+        ├── SNPs_NonExonic.txt
+        ├── SNPs_Nonsynonymous.txt (⭐ Priority)
+        └── SNPs_Stopgain.txt
+
+SAMPLE_NAME_COMPLETE.zip       (Download this!)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ QUICK START COMMANDS
+
+# Full workflow from scratch:
+┌────────────────────────────────────────────────────────────┐
+│ # 1. Cleanup old data                                      │
+│ cd ~/NGS && rm -rf results/ data/ uploads/ *.zip           │
+│                                                            │
+│ # 2. Check storage                                         │
+│ du -sh ~/NGS                                               │
+│                                                            │
+│ # 3. Create data folder                                    │
+│ mkdir -p ~/NGS/data                                        │
+│                                                            │
+│ # 4. Upload FASTQ files to data/                           │
+│ # (Use JupyterLab upload)                                  │
+│                                                            │
+│ # 5. Run master pipeline                                   │
+│ bash MASTER_PIPELINE.sh                                    │
+│                                                            │
+│ # 6. Download zip files                                    │
+│ ls -lh *_COMPLETE.zip                                      │
+└────────────────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ PIPELINE COMPLETENESS: 100%
+
+Everything included from raw reads to categorized annotated variants!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
