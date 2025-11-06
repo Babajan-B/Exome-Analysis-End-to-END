@@ -247,18 +247,45 @@ ZIP_NAME="NGS_Results_Complete_$(date +%Y%m%d_%H%M%S).zip"
 
 echo "Creating archive: $ZIP_NAME"
 echo ""
+echo "Step 1: Compressing annotated VCF files..."
 
-# Include essential files only
+# Compress and index annotated VCFs
+for SAMPLE in "${SAMPLES[@]}"; do
+    SAMPLE_DIR=$RESULTS_DIR/$SAMPLE
+    
+    # Compress snpEff VCF
+    if [ -f "$SAMPLE_DIR/annovar/snpeff/${SAMPLE}_snpEff_annotated.vcf" ]; then
+        echo "  Compressing ${SAMPLE} snpEff VCF..."
+        bgzip -f $SAMPLE_DIR/annovar/snpeff/${SAMPLE}_snpEff_annotated.vcf
+        tabix -p vcf $SAMPLE_DIR/annovar/snpeff/${SAMPLE}_snpEff_annotated.vcf.gz
+    fi
+    
+    # Compress ANNOVAR VCF if not already compressed
+    if [ -f "$SAMPLE_DIR/annovar/annotated_${SAMPLE}.hg19_multianno.vcf" ]; then
+        echo "  Compressing ${SAMPLE} ANNOVAR VCF..."
+        bgzip -f $SAMPLE_DIR/annovar/annotated_${SAMPLE}.hg19_multianno.vcf
+        tabix -p vcf $SAMPLE_DIR/annovar/annotated_${SAMPLE}.hg19_multianno.vcf.gz
+    fi
+done
+
+echo ""
+echo "Step 2: Creating ZIP archive..."
+
+# Include essential files including compressed VCFs
 zip -r $ZIP_NAME \
     results/*/annovar/*.txt \
     results/*/annovar/snpeff/*.html \
     results/*/annovar/snpeff/*.csv \
+    results/*/annovar/snpeff/*.vcf.gz \
+    results/*/annovar/snpeff/*.vcf.gz.tbi \
+    results/*/annovar/*.hg19_multianno.vcf.gz \
+    results/*/annovar/*.hg19_multianno.vcf.gz.tbi \
     results/*/annovar/separated_by_type/*.txt \
     results/*/annovar/functional_classification/*.txt \
     results/*/fastqc/*.html \
     results/*/trimmed/fastp_report.html \
     MASTER_ANALYSIS_SUMMARY.txt \
-    -x "*.bam" "*.sam" "*.fastq.gz" "*.vcf" "*.avinput" "*_dropped" "*_filtered" \
+    -x "*.bam" "*.sam" "*.fastq.gz" "*.avinput" "*_dropped" "*_filtered" "raw_variants.vcf" "filtered_variants.vcf" "filtered_PASS_only.vcf" \
     2>/dev/null
 
 ZIP_SIZE=$(du -sh $ZIP_NAME | cut -f1)
@@ -273,11 +300,15 @@ echo ""
 echo "Contents:"
 echo "  ✅ ANNOVAR annotation (.txt files)"
 echo "  ✅ ANNOVAR with zygosity"
-echo "  ✅ snpEff annotation + reports"
+echo "  ✅ ANNOVAR annotated VCF (compressed + indexed)"
+echo "  ✅ snpEff annotated VCF (compressed + indexed)"
+echo "  ✅ snpEff reports (HTML + CSV)"
 echo "  ✅ Variant type separation (SNPs, Insertions, Deletions)"
 echo "  ✅ Functional classification (Exonic, Nonsynonymous, etc.)"
 echo "  ✅ Quality control reports (FastQC, fastp)"
 echo "  ✅ Summary report"
+echo ""
+echo "VCF files are compressed and indexed for IGV viewing"
 echo ""
 echo "Download this file:"
 echo "  ~/NGS/$ZIP_NAME"
