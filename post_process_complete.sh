@@ -100,8 +100,12 @@ for SAMPLE in "${SAMPLES[@]}"; do
     if [ -f "$ANNOT_TXT" ] && [ -f "$PASS_VCF" ]; then
         echo "  Extracting zygosity from VCF..."
         
-        python3 << 'PYTHON_SCRIPT'
+        cat > /tmp/add_zygosity_${SAMPLE}.py << 'PYTHON_SCRIPT'
 import sys
+
+if len(sys.argv) != 4:
+    print("Usage: script.py vcf_file annot_file output_file")
+    sys.exit(1)
 
 vcf_file = sys.argv[1]
 annot_file = sys.argv[2]
@@ -152,57 +156,8 @@ with open(annot_file, 'r') as f_in, open(output_file, 'w') as f_out:
 print("  ✅ Zygosity column added")
 PYTHON_SCRIPT
         
-        python3 -c "$(cat)" "$PASS_VCF" "$ANNOT_TXT" "$ANNOT_WITH_ZYG" << 'PYTHON_SCRIPT'
-import sys
-
-vcf_file = sys.argv[1]
-annot_file = sys.argv[2]
-output_file = sys.argv[3]
-
-# Extract GT from VCF
-gt_dict = {}
-with open(vcf_file, 'r') as f:
-    for line in f:
-        if line.startswith('#'):
-            continue
-        parts = line.strip().split('\t')
-        if len(parts) > 9:
-            chrom, pos, _, ref, alt = parts[0], parts[1], parts[2], parts[3], parts[4]
-            format_field = parts[8].split(':')
-            sample_field = parts[9].split(':')
-            
-            if 'GT' in format_field:
-                gt_index = format_field.index('GT')
-                if gt_index < len(sample_field):
-                    genotype = sample_field[gt_index]
-                    
-                    if genotype in ['0/1', '1/0']:
-                        zygosity = "Heterozygous"
-                    elif genotype == '1/1':
-                        zygosity = "Homozygous"
-                    elif genotype == '0/0':
-                        zygosity = "Reference"
-                    else:
-                        zygosity = "Unknown"
-                    
-                    key = f"{chrom}:{pos}:{ref}:{alt}"
-                    gt_dict[key] = zygosity
-
-# Add zygosity column
-with open(annot_file, 'r') as f_in, open(output_file, 'w') as f_out:
-    header = f_in.readline()
-    f_out.write(header.strip() + "\tZygosity\n")
-    
-    for line in f_in:
-        parts = line.strip().split('\t')
-        if len(parts) >= 5:
-            chrom, start, _, ref, alt = parts[0], parts[1], parts[2], parts[3], parts[4]
-            key = f"{chrom}:{start}:{ref}:{alt}"
-            zygosity = gt_dict.get(key, "Unknown")
-            f_out.write(line.strip() + "\t" + zygosity + "\n")
-
-print("  ✅ Zygosity column added")
-PYTHON_SCRIPT
+        python3 /tmp/add_zygosity_${SAMPLE}.py "$PASS_VCF" "$ANNOT_TXT" "$ANNOT_WITH_ZYG"
+        rm -f /tmp/add_zygosity_${SAMPLE}.py
         
     else
         echo "  ⚠️  Required files not found, skipping zygosity"
