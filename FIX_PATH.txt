@@ -1,0 +1,41 @@
+╔════════════════════════════════════════════════════════════╗
+║              FIX INSTALLATION - JARVIS LAB                 ║
+╚════════════════════════════════════════════════════════════╝
+
+STEP 1: Pull latest code and check installation
+────────────────────────────────────────────────────────────
+
+cd ~/NGS && \
+git pull origin refactor-pipeline-args-e5faR && \
+bash CHECK_INSTALLATION.sh
+
+────────────────────────────────────────────────────────────
+
+STEP 2a: If tools are installed but NOT in PATH, run this:
+────────────────────────────────────────────────────────────
+
+export PATH=$PATH:~/NGS/tools/FastQC:~/NGS/tools && \
+fastqc --version && \
+fastp --version 2>&1 | head -1 && \
+bwa 2>&1 | head -3
+
+────────────────────────────────────────────────────────────
+
+STEP 2b: If tools are NOT installed at all, run full install:
+────────────────────────────────────────────────────────────
+
+cd ~/NGS && \
+bash install_all.sh
+
+⚠️ WARNING: This takes 45-60 minutes and needs ~15 GB space
+
+────────────────────────────────────────────────────────────
+
+STEP 3: After fixing PATH, run pipeline:
+────────────────────────────────────────────────────────────
+
+cd ~/NGS && \
+bash MASTER_PIPELINE.sh ~/NGS/data 16
+
+════════════════════════════════════════════════════════════
+
