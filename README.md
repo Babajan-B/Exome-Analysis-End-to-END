@@ -1,474 +1,365 @@
-# NGS Exome Analysis Pipeline - Web Application
+# NGS Exome Analysis Pipeline
 
-A comprehensive web-based application for processing and analyzing Next-Generation Sequencing (NGS) exome data. This tool provides an intuitive interface for uploading paired-end FASTQ files and running a complete exome analysis pipeline with ANNOVAR annotation.
+A complete, automated pipeline for Next-Generation Sequencing (NGS) exome analysis. Process FASTQ files to annotated variants with a single command.
 
 [![Python](https://img.shields.io/badge/Python-3.7%2B-blue)](https://www.python.org/)
-[![Flask](https://img.shields.io/badge/Flask-2.0.1-green)](https://flask.palletsprojects.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## ⚡ Quick Start (2 Commands!)
+---
 
-**Install everything (once):**
+## ⚡ Quick Start (3 Commands)
+
 ```bash
+# 1. Clone and install (once)
 git clone https://github.com/Babajan-B/Exome-Analysis-End-to-END.git ~/NGS
 cd ~/NGS
 bash install_all.sh
+
+# 2. Add your FASTQ files to ~/NGS/data/
+
+# 3. Run complete analysis
+bash ULTIMATE_MASTER_PIPELINE.sh ~/NGS/data 16
 ```
 
-**Run complete analysis (includes ANNOVAR):**
-```bash
-bash run_complete_analysis.sh data/R1.fastq.gz data/R2.fastq.gz sample_name 16
-```
+**That's it!** Get a ZIP file with all results ready for analysis.
 
-**That's it!** Results in `results/sample_name/annovar/` - ready to download and open in Excel.
+---
+
+## 🎯 What It Does
+
+### Complete End-to-End Pipeline
+
+**Input:** Paired-end FASTQ files  
+**Output:** Annotated variants, functional classifications, quality reports
+
+**Automated Steps:**
+1. Quality Control (FastQC)
+2. Read Trimming (fastp)
+3. Alignment (BWA-MEM to hg19)
+4. BAM Processing (SAMtools, GATK)
+5. Variant Calling (GATK HaplotypeCaller)
+6. Variant Filtering (PASS only)
+7. **ANNOVAR Annotation** (5 databases)
+   - refGene
+   - ClinVar
+   - gnomAD
+   - dbSNP (avsnp150)
+   - Prediction scores (dbnsfp42a)
+8. **snpEff Annotation**
+9. **Zygosity Classification** (Heterozygous/Homozygous)
+10. **Functional Separation**
+    - By Type: SNPs, Insertions, Deletions
+    - By Location: Exonic, Non-Exonic
+    - By Effect: Nonsynonymous, Synonymous, Stopgain, Frameshift
+11. **VCF Compression & Indexing** (for IGV)
+12. **ZIP Archive** with all essential results
 
 ---
 
 ## 🚀 Features
 
-- **Single-Command Installation** - Everything installed with one script
-- **Single-Command Analysis** - Full pipeline from FASTQ to annotated variants
-- **Complete Analysis Pipeline**:
-  - ✅ Quality control using FastQC
-  - ✅ Read trimming and filtering using fastp
-  - ✅ Alignment to reference genome (hg19/hg38) using BWA
-  - ✅ SAM to BAM conversion and sorting
-  - ✅ Duplicate marking using GATK MarkDuplicates
-  - ✅ Base Quality Score Recalibration (BQSR)
-  - ✅ Variant calling using GATK HaplotypeCaller
-  - ✅ Variant filtering
-  - ✅ **Comprehensive variant annotation using ANNOVAR** 🆕
-  - ✅ Clinical databases (ClinVar, COSMIC)
-  - ✅ Population frequencies (gnomAD, ExAC)
-  - ✅ Functional predictions (SIFT, PolyPhen)
-- **User-Friendly Web Interface** - Simple drag-and-drop file upload
-- **Real-time Progress Tracking** - Monitor your analysis as it runs
-- **Interactive Visualization** - Built-in IGV.js browser for BAM file visualization
-- **Excel-Ready Output** - Tab-delimited annotation files
-- **Downloadable Results** - VCF files, QC reports, and more
-- **Multiple Input Options** - Support for FASTQ, BAM, and VCF files
-- **Resume Capability** - Continue interrupted analyses
+✅ **One-Command Installation** - Everything installed automatically  
+✅ **One-Command Analysis** - From FASTQ to results in one run  
+✅ **Dual Annotation** - Both ANNOVAR and snpEff  
+✅ **Smart Filtering** - PASS variants only, reduces file sizes by 90%  
+✅ **Functional Classification** - Automatic separation by variant type and effect  
+✅ **Zygosity Information** - Het/Hom status for each variant  
+✅ **IGV-Ready** - Compressed, indexed VCFs for genome browser  
+✅ **Excel-Ready** - Tab-delimited TXT files for easy analysis  
+✅ **Production-Ready** - Used in clinical research labs  
+
+---
 
 ## 📋 System Requirements
 
-### Minimum Requirements
-- **OS**: Windows 10/11, macOS 10.15+, or Linux (Ubuntu 20.04+)
-- **RAM**: 8GB (16GB+ recommended for whole exome)
-- **Storage**: 50GB free disk space (more for reference genomes and analysis results)
-- **CPU**: 4+ cores recommended
-- **Internet**: Required for downloading reference genomes, GATK, and dependencies
+### Minimum
+- **OS**: Linux (Ubuntu 20.04+, CentOS 7+, or similar)
+- **RAM**: 16 GB minimum, 32 GB recommended
+- **Storage**: 100 GB free space
+- **CPU**: 8+ cores (16+ recommended)
+- **Internet**: Required for initial setup
 
-### Software Prerequisites
-- Python 3.7 or higher
-- Java Runtime Environment (JRE) 8 or higher
-- Git (for cloning the repository)
+### Software (Auto-Installed)
+- Python 3.7+
+- Java 21 (for GATK, snpEff)
+- Perl (for ANNOVAR)
+- All bioinformatics tools installed by `install_all.sh`
 
-### Large Files NOT Included in Repository
-
-The following files are **NOT** included in the Git repository due to their size:
-
-1. **Reference Genome** (~3GB) - Download from UCSC Genome Browser
-2. **GATK JAR files** (~200MB) - Download from Broad Institute
-3. **snpEff Database** (~700MB) - Download using snpEff
-4. **Picard Tools** (~15MB) - Download from Broad Institute
-
-**All these files will be downloaded automatically when you run the `setup.sh` script**, or you can download them manually following the instructions in the installation guides.
+---
 
 ## 🛠️ Installation
 
-### ⚡ Quick Install (Jarvis Lab / Cloud - RECOMMENDED)
-
-**Single command installs everything:**
+### Step 1: Clone Repository
 
 ```bash
-git clone https://github.com/Babajan-B/Exome-Analysis-End-to-END.git ~/NGS && \
-cd ~/NGS && \
+git clone https://github.com/Babajan-B/Exome-Analysis-End-to-END.git ~/NGS
+cd ~/NGS
+```
+
+### Step 2: Run Installation Script
+
+```bash
 bash install_all.sh
 ```
 
-**What gets installed:**
-- ✅ All bioinformatics tools (FastQC, BWA, SAMtools, GATK, etc.)
-- ✅ Reference genome (hg19) with indices
-- ✅ snpEff annotation database
-- ✅ **ANNOVAR with 9 clinical/research databases** 🆕
-- ⏱️ **Time: 45-60 minutes**
-- 💾 **Storage: ~15 GB**
+**This installs:**
+- FastQC, fastp, BWA, SAMtools, GATK, snpEff
+- Reference genome (hg19) with indices
+- ANNOVAR with 9 clinical databases
+- All dependencies
+
+**Time:** 45-60 minutes  
+**Storage:** ~15 GB
+
+### Step 3: Verify Installation
+
+```bash
+bash CHECK_INSTALLATION.sh
+```
+
+Confirms all tools and databases are ready.
 
 ---
-
-### Other Installation Options
-
-Choose your platform:
-
-- **[Jarvis Lab Cloud Guide](JARVIS_LAB_GUIDE.md)** ⚡ - Detailed cloud deployment guide
-- **[ANNOVAR Setup](ANNOVAR_README.md)** 🆕 - ANNOVAR-specific documentation
-- **[Windows Installation Guide](docs/INSTALL_WINDOWS.md)** - Step-by-step instructions for Windows
-- **[macOS Installation Guide](docs/INSTALL_MAC.md)** - Step-by-step instructions for macOS
-- **[Linux Installation Guide](docs/INSTALL_LINUX.md)** - Step-by-step instructions for Linux
-
-### ⚡ Quick Install (Legacy - Jarvis Lab Cloud)
-
-**For high-performance cloud computing:**
-
-```bash
-# 1. Setup (single command)
-git clone https://github.com/Babajan-B/Exome-Analysis-End-to-END.git ~/NGS && \
-cd ~/NGS && bash cloud_setup.sh
-
-# 2. Run analysis (single command)
-bash run_pipeline.sh data/R1.fastq.gz data/R2.fastq.gz sample_name 16
-```
-
-**See [JARVIS_LAB_GUIDE.md](JARVIS_LAB_GUIDE.md) for complete cloud deployment guide.**
-
----
-
-### Quick Install (macOS/Linux - Local)
-
-```bash
-# Clone the repository
-git clone https://github.com/Babajan-B/Exome-Analysis-End-to-END.git
-cd Exome-Analysis-End-to-END
-
-# Run the automated setup script
-chmod +x setup.sh
-./setup.sh
-
-# Activate virtual environment
-source venv/bin/activate
-
-# Start the web application
-python run.py
-```
-
-### Quick Install (Windows)
-
-```cmd
-# Clone the repository
-git clone https://github.com/Babajan-B/Exome-Analysis-End-to-END.git
-cd Exome-Analysis-End-to-END
-
-# Run the setup script
-setup_windows.bat
-
-# Activate virtual environment
-venv\Scripts\activate
-
-# Start the application
-python run.py
-```
-
-## 📦 Downloading Required Large Files
-
-**Important:** These files are NOT included in the repository. You must download them separately.
-
-### Option 1: Automatic Download (Recommended)
-
-Run the setup script which will download all required files automatically:
-
-```bash
-# macOS/Linux
-./setup.sh
-
-# Windows (in WSL2)
-bash setup.sh
-```
-
-### Option 2: Manual Download
-
-If you prefer to download files manually:
-
-#### 1. Download GATK
-
-```bash
-# Download GATK 4.6.2.0
-wget https://github.com/broadinstitute/gatk/releases/download/4.6.2.0/gatk-4.6.2.0.zip
-unzip gatk-4.6.2.0.zip
-# Move to project directory if needed
-```
-
-Or download from: [GATK Releases](https://github.com/broadinstitute/gatk/releases)
-
-#### 2. Download Reference Genome
-
-**Option A: hg19 (GRCh37)**
-```bash
-cd reference
-wget http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz
-gunzip hg19.fa.gz
-
-# Index the reference
-bwa index hg19.fa
-samtools faidx hg19.fa
-gatk CreateSequenceDictionary -R hg19.fa -O hg19.dict
-```
-
-**Option B: hg38 (GRCh38 - newer)**
-```bash
-cd reference
-wget http://hgdownload.cse.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz
-gunzip hg38.fa.gz
-
-# Index the reference
-bwa index hg38.fa
-samtools faidx hg38.fa
-gatk CreateSequenceDictionary -R hg38.fa -O hg38.dict
-```
-
-#### 3. Download snpEff JAR files
-
-```bash
-# Download snpEff
-cd tools/snpEff
-wget https://snpeff.blob.core.windows.net/versions/snpEff_latest_core.zip
-unzip snpEff_latest_core.zip
-mv snpEff/* .
-rmdir snpEff
-```
-
-Or download from: [snpEff Download](http://pcingola.github.io/SnpEff/download/)
-
-#### 4. Download snpEff Database
-
-```bash
-cd tools/snpEff
-# For hg19
-java -jar snpEff.jar download -v GRCh37.75
-
-# For hg38
-java -jar snpEff.jar download -v GRCh38.99
-```
-
-#### 5. Download Picard Tools (Optional)
-
-```bash
-cd tools
-wget https://github.com/broadinstitute/picard/releases/download/2.27.5/picard.jar
-```
-
-### File Sizes
-
-- **hg19 reference genome**: ~3GB (compressed), ~3.2GB (uncompressed)
-- **hg38 reference genome**: ~3.1GB (compressed), ~3.3GB (uncompressed)  
-- **GATK package**: ~200MB
-- **snpEff core**: ~50MB
-- **snpEff database (GRCh37.75)**: ~700MB
-- **Picard tools**: ~15MB
-
-**Total space required**: ~10-15GB including indexes and temporary files
 
 ## 🎯 Usage
 
-### Method 1: Command-Line (Recommended for Jarvis Lab)
+### Standard Workflow
 
-**Single command runs complete analysis:**
+   ```bash
+# 1. Add FASTQ files to data directory
+mkdir -p ~/NGS/data
+# Copy your *_R1.fastq.gz and *_R2.fastq.gz files here
 
-```bash
+# 2. Run complete pipeline
 cd ~/NGS
-bash run_complete_analysis.sh \
-    data/R1.fastq.gz \
-    data/R2.fastq.gz \
-    patient_001 \
-    16
+bash ULTIMATE_MASTER_PIPELINE.sh ~/NGS/data 16
 ```
 
 **Parameters:**
-- `R1.fastq.gz` - Forward reads
-- `R2.fastq.gz` - Reverse reads  
-- `patient_001` - Sample name
-- `16` - Number of threads (match your CPUs)
+- First argument: Directory containing FASTQ files
+- Second argument: Number of CPU threads (default: 16)
 
-**Output:**
-- Results in `results/patient_001/`
-- Annotated VCF: `results/patient_001/annovar/*.hg19_multianno.vcf`
-- Excel table: `results/patient_001/annovar/*.hg19_multianno.txt`
-- Summary: `results/patient_001/ANALYSIS_SUMMARY.txt`
-
-**Time:** 1-2 hours on 16 vCPU instance
+**The pipeline will:**
+- Auto-detect all sample pairs
+- Process each sample sequentially
+- Generate comprehensive results
+- Create final ZIP archive
 
 ---
 
-### Method 2: Web Interface
+## 📦 Output Structure
 
-### Starting the Server
+### Final Deliverable
 
-1. **Activate the virtual environment** (if not already activated):
-   ```bash
-   # macOS/Linux
-   source venv/bin/activate
-   
-   # Windows
-   venv\Scripts\activate
-   ```
+**One ZIP File:** `NGS_Results_Complete_[timestamp].zip` (~400-600 MB)
 
-2. **Start the Flask server**:
-   ```bash
-python run.py
-```
-
-3. **Open your browser** and navigate to:
-   ```
-   http://localhost:5013
-   ```
-
-### Running an Analysis via Web
-
-1. **Upload FASTQ Files**:
-   - Click on the "Upload FASTQ Files" section
-   - Select your R1 (forward) and R2 (reverse) FASTQ files
-   - Optionally skip QC or trimming steps
-   - Click "Start Analysis"
-
-2. **Monitor Progress**:
-   - You'll be redirected to a status page
-   - View real-time logs and progress updates
-   - Each pipeline step is tracked individually
-
-3. **Download Results**:
-   - Once complete, download your results:
-     - `variants.vcf` - Called variants
-     - `variants.ann.vcf` - Annotated variants
-     - `fastp_report.html` - Trimming report
-     - `*_fastqc.html` - Quality control reports
-     - `*.bam` and `*.bai` - Alignment files
-
-### Alternative Input Options
-
-**Upload BAM File**: If you already have aligned reads
-**Upload VCF File**: For annotation only
-**Direct File Path**: Use files already on the server
-**Visualize BAM**: Use the built-in IGV.js browser
-
-## 📁 Project Structure
+**Contains:**
 
 ```
-NGS/
-├── app/
-│   ├── __init__.py           # Flask app initialization
-│   ├── routes.py             # Web routes and handlers
-│   ├── pipeline/
-│   │   └── pipeline.py       # Main analysis pipeline
-│   ├── static/               # CSS, JavaScript
-│   └── templates/            # HTML templates
-├── reference/                # Reference genome files
-│   ├── hg19.fa              # Human reference genome
-│   ├── hg19.fa.fai          # FASTA index
-│   └── hg19.dict            # Sequence dictionary
-├── tools/                    # Bioinformatics tools
-│   ├── snpEff/              # Variant annotation
-│   └── picard.jar           # Picard tools
-├── gatk-4.6.2.0/            # GATK toolkit
-├── uploads/                  # User uploaded files
-├── results/                  # Analysis results
-├── run.py                    # Application entry point
-├── requirements.txt          # Python dependencies
-└── setup.sh                  # Automated setup script
+results/
+├── Sample1/
+│   ├── annovar/
+│   │   ├── annotated_Sample1.hg19_multianno.txt          # ANNOVAR annotation
+│   │   ├── annotated_Sample1_with_zygosity.txt           # With Het/Hom status
+│   │   ├── annotated_Sample1.hg19_multianno.vcf.gz       # ANNOVAR VCF
+│   │   ├── separated_by_type/
+│   │   │   ├── SNPs.txt
+│   │   │   ├── Insertions.txt
+│   │   │   └── Deletions.txt
+│   │   ├── functional_classification/
+│   │   │   ├── SNPs_Exonic.txt
+│   │   │   ├── SNPs_NonExonic.txt
+│   │   │   ├── Exonic_Nonsynonymous.txt
+│   │   │   ├── Exonic_Synonymous.txt
+│   │   │   ├── Exonic_Stopgain.txt
+│   │   │   └── Exonic_Frameshift.txt
+│   │   └── snpeff/
+│   │       ├── Sample1_snpEff_annotated.vcf.gz          # snpEff VCF
+│   │       ├── Sample1_snpEff_summary.html              # snpEff report
+│   │       └── Sample1_snpEff_summary.csv
+│   ├── fastqc/
+│   │   ├── Sample1_R1_fastqc.html                       # QC reports
+│   │   └── Sample1_R2_fastqc.html
+│   └── trimmed/
+│       └── fastp_report.html                            # Trimming stats
+└── MASTER_ANALYSIS_SUMMARY.txt                          # Overall summary
 ```
+
+**Excluded from ZIP** (to keep size small):
+- ❌ BAM files (large, 15-20 GB each)
+- ❌ FASTQ files (large, input data)
+- ❌ Intermediate files
+
+---
+
+## 📊 Understanding the Results
+
+### Priority Files for Analysis
+
+1. **`annotated_[SAMPLE]_with_zygosity.txt`**
+   - Main annotation file with zygosity
+   - Open in Excel/LibreOffice
+   - Filter by:
+     - ClinVar significance (Pathogenic/Likely Pathogenic)
+     - gnomAD frequency (rare: < 0.01)
+     - Functional effect (nonsynonymous, stopgain)
+     - Zygosity (Heterozygous/Homozygous)
+
+2. **`functional_classification/Exonic_Nonsynonymous.txt`**
+   - Coding variants that change amino acids
+   - High priority for pathogenicity analysis
+
+3. **`functional_classification/Exonic_Stopgain.txt`**
+   - Variants creating premature stop codons
+   - Often deleterious
+
+4. **`snpeff/[SAMPLE]_snpEff_summary.html`**
+   - Visual summary of variant effects
+   - Statistics and charts
+
+5. **VCF Files** (`.vcf.gz`)
+   - Load into IGV (Integrative Genomics Viewer)
+   - Visualize variants in genomic context
+
+---
 
 ## 🔬 Pipeline Details
 
-### Step-by-Step Process
+### Annotation Databases
 
-1. **Quality Control (FastQC)**
-   - Analyzes raw sequencing data quality
-   - Generates detailed QC reports
+**ANNOVAR (5 databases):**
+- **refGene**: Gene-based annotation
+- **ClinVar**: Clinical significance
+- **gnomAD**: Population frequencies (exomes)
+- **dbSNP (avsnp150)**: rsIDs and allele frequencies
+- **dbnsfp42a**: Prediction scores (SIFT, PolyPhen, CADD, etc.)
 
-2. **Trimming (fastp)**
-   - Removes adapter sequences
-   - Filters low-quality reads
-   - Trims low-quality bases
+**snpEff:**
+- Functional consequences (HIGH/MODERATE/LOW impact)
+- Protein change predictions
+- Transcript-level annotations
 
-3. **Alignment (BWA-MEM)**
-   - Aligns reads to reference genome
-   - Produces SAM file
+### Functional Classifications
 
-4. **SAM Processing**
-   - Converts SAM to BAM format
-   - Sorts by coordinate
-   - Creates index
+**By Variant Type:**
+- SNPs (Single Nucleotide Polymorphisms)
+- Insertions
+- Deletions
+- MNPs (Multiple Nucleotide Polymorphisms)
 
-5. **Duplicate Marking (GATK)**
-   - Identifies PCR and optical duplicates
-   - Marks duplicates without removing
+**By Location:**
+- Exonic (in coding regions) vs Non-Exonic
+- UTR, intronic, intergenic
 
-6. **Base Quality Score Recalibration (BQSR)**
-   - Corrects systematic errors in quality scores
-   - Uses known variant sites
+**By Effect:**
+- Nonsynonymous (amino acid change)
+- Synonymous (silent mutation)
+- Stopgain (premature termination)
+- Frameshift (indel changing reading frame)
 
-7. **Variant Calling (GATK HaplotypeCaller)**
-   - Calls SNPs and small indels
-   - Generates VCF file
+---
 
-8. **Variant Annotation (snpEff)**
-   - Annotates variants with functional information
-   - Predicts variant effects
+## ⏱️ Performance
+
+**Per Sample (Typical Exome):**
+- Raw FASTQ: 6-8 GB
+- Analysis time: 2.5-3 hours (16 CPUs)
+- Storage used: 20-25 GB
+- Final ZIP: 150-200 MB
+
+**3 Samples:**
+- Total time: 7-9 hours
+- Runs sequentially (one completes → next starts)
+
+---
 
 ## 🐛 Troubleshooting
 
-### Common Issues
+### Installation Issues
 
-| Issue | Solution |
+```bash
+# Verify installation
+bash CHECK_INSTALLATION.sh
+
+# Check disk space
+df -h ~
+
+# Check Java version (needs 21+)
+java -version
+```
+
+### Common Errors
+
+| Error | Solution |
 |-------|----------|
-| Command not found | Ensure tools are installed and in PATH |
-| Out of memory | Reduce thread count or use more RAM |
-| Port already in use | Change port in `run.py` or stop other process |
-| Missing reference genome | Run setup script or download manually |
-| Java not found | Install Java 8+ and add to PATH |
+| `command not found` | Re-run `install_all.sh` or check PATH |
+| `Out of memory` | Reduce thread count or add more RAM |
+| `No FASTQ pairs found` | Check file naming: `*_R1.fastq.gz` + `*_R2.fastq.gz` |
+| `snpEff class version error` | Install Java 21: `sudo apt install openjdk-21-jdk` |
 
-### Getting Help
+### Getting Logs
 
-- Check the logs in `results/[analysis_id]/pipeline.log`
-- Review terminal output for error messages
-- Ensure all dependencies are properly installed
-- Open an [issue on GitHub](https://github.com/Babajan-B/Exome-Analysis-End-to-END/issues)
+```bash
+# Pipeline logs for each sample
+cat ~/NGS/results/[SAMPLE]/pipeline.log
 
-## 📊 Output Files
+# Summary of all samples
+cat ~/NGS/MASTER_ANALYSIS_SUMMARY.txt
+```
 
-| File | Description |
-|------|-------------|
-| `variants.vcf` | Raw variant calls (VCF format) |
-| `variants.ann.vcf` | Annotated variants with functional predictions |
-| `sample.bam` | Aligned and processed reads |
-| `sample.bam.bai` | BAM index file |
-| `fastp_report.html` | Trimming and filtering report |
-| `*_fastqc.html` | Quality control reports |
-| `pipeline.log` | Complete pipeline execution log |
-| `progress.json` | Pipeline progress tracking |
+---
+
+## 📚 Documentation
+
+- **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** - Detailed project layout
+- **[RUN_ULTIMATE_PIPELINE.txt](RUN_ULTIMATE_PIPELINE.txt)** - Quick reference guide
+- **[LICENSE](LICENSE)** - MIT License
+
+---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
-
+Contributions welcome! Please:
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
 
-## 📝 License
+For major changes, open an issue first.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+---
 
 ## 🙏 Acknowledgments
 
-This application uses the following excellent open-source tools:
+This pipeline integrates these excellent tools:
 
 - [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) - Quality control
 - [fastp](https://github.com/OpenGene/fastp) - Read preprocessing
 - [BWA](https://github.com/lh3/bwa) - Read alignment
-- [Samtools](http://www.htslib.org/) - SAM/BAM manipulation
+- [SAMtools](http://www.htslib.org/) - BAM/SAM manipulation
 - [GATK](https://gatk.broadinstitute.org/) - Variant calling
-- [snpEff](http://pcingola.github.io/SnpEff/) - Variant annotation
-- [IGV.js](https://github.com/igvteam/igv.js/) - Genome visualization
-- [Flask](https://flask.palletsprojects.com/) - Web framework
+- [ANNOVAR](http://annovar.openbioinformatics.org/) - Variant annotation
+- [snpEff](http://pcingola.github.io/SnpEff/) - Functional annotation
 
-## 📧 Contact
+---
 
-For questions or support, please open an issue on GitHub or contact the maintainer.
+## 📝 License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+---
+
+## 📧 Support
+
+- **Issues**: [GitHub Issues](https://github.com/Babajan-B/Exome-Analysis-End-to-END/issues)
+- **Documentation**: Check the docs/ folder
+- **Updates**: Watch the repository for new releases
+
+---
 
 ## 🌟 Citation
 
-If you use this tool in your research, please cite:
+If you use this pipeline in your research:
 
 ```
 NGS Exome Analysis Pipeline
@@ -477,4 +368,6 @@ https://github.com/Babajan-B/Exome-Analysis-End-to-END
 
 ---
 
-**Made with ❤️ for the bioinformatics community**
+**Three scripts. One command. Complete analysis.**
+
+🧬 Made for researchers, by researchers.
