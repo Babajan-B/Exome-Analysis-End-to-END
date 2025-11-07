@@ -1,0 +1,174 @@
+╔════════════════════════════════════════════════════════════╗
+║         ULTIMATE PIPELINE - QUICK START GUIDE              ║
+╚════════════════════════════════════════════════════════════╝
+
+Complete end-to-end NGS exome analysis in ONE command!
+
+────────────────────────────────────────────────────────────
+
+QUICK START:
+
+cd ~/NGS && \
+bash ULTIMATE_MASTER_PIPELINE.sh ~/NGS/data 16
+
+────────────────────────────────────────────────────────────
+
+WHAT IT DOES AUTOMATICALLY:
+
+For each sample in ~/NGS/data/:
+
+Part 1: CORE PIPELINE
+  ✅ Quality Control (FastQC)
+  ✅ Trimming (fastp)
+  ✅ Alignment (BWA)
+  ✅ Sorting & Deduplication
+  ✅ Variant Calling (GATK)
+  ✅ Filtering (PASS only)
+  ✅ Basic separation (SNPs, Insertions, Deletions)
+
+Part 2: ADVANCED ANNOTATION
+  ✅ ANNOVAR annotation (5 databases)
+     - refGene, ClinVar, gnomAD, dbSNP, predictions
+  ✅ snpEff annotation
+  ✅ Add zygosity (Heterozygous/Homozygous)
+  ✅ Functional classification:
+     - SNPs_Exonic.txt
+     - SNPs_NonExonic.txt
+     - Exonic_Nonsynonymous.txt
+     - Exonic_Synonymous.txt
+     - Exonic_Stopgain.txt
+     - Exonic_Frameshift.txt
+
+Part 3: FINAL PACKAGING
+  ✅ Compress VCFs (with .tbi index for IGV)
+  ✅ Create ZIP archive with all results
+
+────────────────────────────────────────────────────────────
+
+REQUIREMENTS:
+
+1. FASTQ files in ~/NGS/data/ with naming:
+   - sample_R1.fastq.gz + sample_R2.fastq.gz
+   OR
+   - sample_1.fastq.gz + sample_2.fastq.gz
+
+2. Installation completed:
+   bash install_all.sh
+
+3. Sufficient storage:
+   - Per sample: ~20-25 GB during analysis
+   - Final ZIP: ~150-200 MB
+
+────────────────────────────────────────────────────────────
+
+TIMELINE:
+
+Per sample (typical exome):
+  - 2.5-3 hours on 16 CPUs
+  - 1.5-2 hours on 32 CPUs
+
+Multiple samples:
+  - Processed sequentially (one completes → next starts)
+  - 3 samples: ~7-9 hours on 16 CPUs
+
+────────────────────────────────────────────────────────────
+
+FINAL OUTPUT:
+
+One ZIP file in ~/NGS/:
+  NGS_Results_Complete_[timestamp].zip
+
+Contains:
+  ✅ ANNOVAR annotations with zygosity
+  ✅ snpEff annotations + reports
+  ✅ Compressed VCFs (ANNOVAR + snpEff) with indices
+  ✅ Variant type separation files
+  ✅ Functional classification files
+  ✅ Quality control reports
+  ✅ Complete analysis summary
+
+Size: ~400-600 MB for 3 samples
+
+────────────────────────────────────────────────────────────
+
+CUSTOMIZATION:
+
+# Change number of threads
+bash ULTIMATE_MASTER_PIPELINE.sh ~/NGS/data 32
+
+# Different data directory
+bash ULTIMATE_MASTER_PIPELINE.sh /path/to/fastq/files 16
+
+────────────────────────────────────────────────────────────
+
+MONITORING PROGRESS:
+
+# Check if running
+ps aux | grep ULTIMATE_MASTER_PIPELINE
+
+# Watch logs (in another terminal)
+tail -f ~/NGS/results/[SAMPLE_NAME]/pipeline.log
+
+# Check disk usage
+df -h ~
+du -sh ~/NGS/results/*
+
+────────────────────────────────────────────────────────────
+
+AFTER COMPLETION:
+
+1. Download the ZIP file:
+   ~/NGS/NGS_Results_Complete_*.zip
+
+2. Extract and analyze:
+   - Open .txt files in Excel
+   - Load .vcf.gz files in IGV
+   - Review HTML reports
+
+3. Key files to check:
+   - annotated_[SAMPLE]_with_zygosity.txt (main results)
+   - Exonic_Nonsynonymous.txt (coding variants)
+   - Exonic_Stopgain.txt (truncating variants)
+   - snpEff_summary.html (visual statistics)
+
+────────────────────────────────────────────────────────────
+
+TROUBLESHOOTING:
+
+# Verify installation
+bash CHECK_INSTALLATION.sh
+
+# Check if FASTQ files detected
+ls -lh ~/NGS/data/*.fastq.gz
+
+# View errors
+cat ~/NGS/results/[SAMPLE]/pipeline.log | grep -i error
+
+# Check space
+df -h ~
+
+# Restart from checkpoint (if interrupted)
+# The pipeline will resume from last completed step
+
+────────────────────────────────────────────────────────────
+
+FIRST TIME SETUP:
+
+cd ~/NGS
+git pull origin refactor-pipeline-args-e5faR
+bash CHECK_INSTALLATION.sh
+
+If tools missing:
+bash install_all.sh
+
+────────────────────────────────────────────────────────────
+
+THREE SCRIPTS = COMPLETE PIPELINE:
+
+1. install_all.sh → Install once
+2. CHECK_INSTALLATION.sh → Verify anytime
+3. ULTIMATE_MASTER_PIPELINE.sh → Run for each analysis
+
+════════════════════════════════════════════════════════════
+
+That's it! One command from FASTQ to annotated results. 🚀

@@ -60,7 +60,7 @@ def upload_file():
         os.makedirs(result_folder, exist_ok=True)
         
         # Run the pipeline in a background thread
-        run_pipeline(analysis_id, r1_path, r2_path, result_folder, skip_qc, skip_trim)
+        run_pipeline(analysis_id, r1_path=r1_path, r2_path=r2_path, result_folder=result_folder, skip_qc=skip_qc, skip_trim=skip_trim)
         
         return redirect(url_for('main.analysis_status', analysis_id=analysis_id))
     
@@ -110,7 +110,7 @@ def upload_direct():
     os.makedirs(result_folder, exist_ok=True)
     
     # Run the pipeline in a background thread
-    run_pipeline(analysis_id, dest_r1_path, dest_r2_path, result_folder)
+    run_pipeline(analysis_id, r1_path=dest_r1_path, r2_path=dest_r2_path, result_folder=result_folder)
     
     return redirect(url_for('main.analysis_status', analysis_id=analysis_id))
 
