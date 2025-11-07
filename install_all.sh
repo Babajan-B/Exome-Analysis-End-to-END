@@ -1,7 +1,7 @@
 #!/bin/bash
 # Complete NGS Pipeline Installation Script
 # Single command to install everything: tools, reference genome, and ANNOVAR
-# For Jarvis Lab / Cloud Instance
+# Works on shared servers, cloud instances, or local workstations
 
 set -e  # Exit on any error
 

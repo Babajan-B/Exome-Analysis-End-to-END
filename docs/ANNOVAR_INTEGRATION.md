@@ -15,62 +15,43 @@ Complete guide for using ANNOVAR with the NGS Exome Analysis Pipeline.
 
 ## 🔧 Installation
 
-### For Jarvis Lab / Cloud Instance
+### Option 1: Bundled installer (recommended)
 
 ```bash
 cd ~/NGS
-bash setup_annovar.sh
+bash install_all.sh
 ```
 
-This will:
-- Download ANNOVAR from the official source
-- Install to `~/NGS/tools/annovar/`
-- Download essential databases for hg19:
-  - `refGene` - RefSeq gene annotations
-  - `knownGene` - UCSC known genes
-  - `ensGene` - Ensembl genes
-  - `avsnp150` - dbSNP version 150
-  - `gnomad211_exome` - gnomAD allele frequencies
-  - `clinvar_20240917` - ClinVar pathogenic variants
-  - `dbnsfp42a` - dbNSFP functional predictions
-  - `cosmic70` - COSMIC cancer mutations
-  - `icgc28` - ICGC somatic mutations
+This downloads ANNOVAR to `~/NGS/tools/annovar/` and populates the default hg19 databases used by the pipeline (refGene, ClinVar, gnomAD, dbSNP, dbNSFP, COSMIC, ICGC, etc.).
 
-**Storage Required**: ~2-5 GB for databases
+**Storage Required**: ~2–5 GB for databases  
+**Time Required**: 15–30 minutes (depends on network speed)
 
-**Time Required**: 15-30 minutes (depending on download speed)
+### Option 2: Manual installation
+
+```bash
+cd ~/NGS/tools
+wget http://www.openbioinformatics.org/annovar/download/0wgxR2rIVP/annovar.latest.tar.gz
+mkdir -p annovar && tar -xzf annovar.latest.tar.gz --strip-components=1 -C annovar
+rm annovar.latest.tar.gz
+cd annovar
+perl annotate_variation.pl -buildver hg19 -downdb -webfrom annovar refGene humandb/
+# repeat annotate_variation to download any additional databases you need
+```
 
 ---
 
 ## 🚀 Quick Start
 
-### Option 1: Use the Helper Script (Easiest)
-
-```bash
-# Annotate a VCF file with default settings
-bash annovar_helper.sh variants.vcf output_prefix
-
-# Specify genome build
-bash annovar_helper.sh variants.vcf output_prefix hg38
-```
-
-### Option 2: Manual ANNOVAR Command
+### Basic command-line usage
 
 ```bash
 cd ~/NGS/tools/annovar
 
-# Comprehensive annotation
-perl table_annovar.pl \
-    /path/to/variants.vcf \
-    humandb/ \
-    -buildver hg19 \
-    -out annotated \
-    -remove \
-    -protocol refGene,avsnp150,gnomad211_exome,clinvar_20240917,dbnsfp42a \
-    -operation g,f,f,f,f \
-    -nastring . \
-    -vcfinput
+perl table_annovar.pl     /path/to/variants.vcf     humandb/     -buildver hg19     -out annotated     -remove     -protocol refGene,clinvar_20240917,gnomad211_exome,avsnp150,dbnsfp42a     -operation g,f,f,f,f     -nastring .     -vcfinput     -polish
 ```
+
+The bundled pipeline runs a similar command automatically on every sample after variant filtering.
 
 ---
 

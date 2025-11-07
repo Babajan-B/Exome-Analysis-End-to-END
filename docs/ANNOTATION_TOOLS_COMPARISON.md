@@ -290,7 +290,7 @@ vep -i input.vcf \
 **Why?**
 - ✅ Fast annotation speed
 - ✅ Excellent clinical database support
-- ✅ Easy to install and use in Jarvis Lab
+- ✅ Easy to install and automate on shared compute nodes
 - ✅ Flexible output formats (VCF + TXT)
 - ✅ Regular database updates
 - ✅ Good for both research and clinical
