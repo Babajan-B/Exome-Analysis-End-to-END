@@ -10,18 +10,19 @@ A complete, automated pipeline for Next-Generation Sequencing (NGS) exome analys
 ## ⚡ Quick Start (3 Commands)
 
 ```bash
-# 1. Clone and install (once)
+# 1. Clone the repository (run once)
 git clone https://github.com/Babajan-B/Exome-Analysis-End-to-END.git ~/NGS
 cd ~/NGS
+
+# 2. Install every dependency (tools, reference genome, databases)
 bash install_all.sh
 
-# 2. Add your FASTQ files to ~/NGS/data/
-
-# 3. Run complete analysis
+# 3. Run the full pipeline on all FASTQ pairs in ~/NGS/data/
 bash ULTIMATE_MASTER_PIPELINE.sh ~/NGS/data 16
 ```
 
-**That's it!** Get a ZIP file with all results ready for analysis.
+After the first run you only need step 3.  
+The pipeline creates a timestamped ZIP in `~/NGS/` with every report, annotation, and summary.
 
 ---
 
