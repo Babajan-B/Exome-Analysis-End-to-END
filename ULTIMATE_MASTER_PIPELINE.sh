@@ -3,17 +3,29 @@
 # Includes: QC → Alignment → Variant Calling → ANNOVAR → snpEff → Advanced Separation → ZIP
 # Usage: bash ULTIMATE_MASTER_PIPELINE.sh [data_directory] [threads]
 
-set -e
+set -eo pipefail
 
 # Configuration
 DATA_DIR=${1:-~/NGS/data}
 THREADS=${2:-16}
-WORK_DIR=~/NGS
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORK_DIR=${NGS_WORK_DIR:-$SCRIPT_DIR}
 REFERENCE=$WORK_DIR/reference/hg19.fa
+# Known-sites are BUILD-SPECIFIC — hg38 known-sites are NOT compatible with an
+# hg19 reference (contig lengths differ). Resolve the dir from the reference name
+# so BQSR only ever uses matching-build sites (and skips if that build has none).
+REF_BUILD=$(basename "$REFERENCE" .fa)   # e.g. hg19 or hg38
+KNOWN_SITES_DIR=$WORK_DIR/reference/known-sites/$REF_BUILD
+KNOWN_DBSNP=$KNOWN_SITES_DIR/dbsnp.vcf.gz
+KNOWN_MILLS=$KNOWN_SITES_DIR/mills.vcf.gz
+KNOWN_INDELS=$KNOWN_SITES_DIR/1000G_indels.vcf.gz
 ANNOVAR_DIR=$WORK_DIR/tools/annovar
 SNPEFF_DIR=$WORK_DIR/tools/snpEff
 SNPEFF_DB="GRCh37.75"
-GATK=/opt/gatk-4.6.2.0/gatk
+GATK=${GATK:-$WORK_DIR/gatk-4.6.2.0/gatk}
+if [ ! -x "$GATK" ] && [ -x /opt/gatk-4.6.2.0/gatk ]; then
+    GATK=/opt/gatk-4.6.2.0/gatk
+fi
 
 echo "╔════════════════════════════════════════════════════════════╗"
 echo "║        ULTIMATE EXOME ANALYSIS PIPELINE                   ║"
@@ -63,7 +75,9 @@ echo ""
 # Function to detect FASTQ pairs
 detect_samples() {
     local data_dir=$1
-    declare -gA SAMPLE_PAIRS
+    SAMPLE_NAMES=()
+    SAMPLE_R1S=()
+    SAMPLE_R2S=()
     
     cd "$data_dir"
     
@@ -81,7 +95,9 @@ detect_samples() {
             # Extract sample name
             sample_name=$(echo "$r1_file" | sed -E 's/[._-]*(R1|_1)[._-]*.*//' | sed -E 's/\.(fastq|fq)\.gz$//')
             
-            SAMPLE_PAIRS["$sample_name"]="$data_dir/$r1_file,$data_dir/$r2_file"
+            SAMPLE_NAMES+=("$sample_name")
+            SAMPLE_R1S+=("$data_dir/$r1_file")
+            SAMPLE_R2S+=("$data_dir/$r2_file")
         fi
     done
     
@@ -104,7 +120,7 @@ analyze_sample() {
     echo ""
     
     # Create output directories
-    mkdir -p $output_dir/{fastqc,trimmed,aligned,sorted,dedup,variants,filtered,annovar/snpeff,annovar/functional_classification}
+    mkdir -p $output_dir/{fastqc,trimmed,aligned,sorted,dedup,bqsr,variants,filtered,annovar/snpeff,annovar/functional_classification}
     
     # Log file
     LOG=$output_dir/pipeline.log
@@ -125,59 +141,248 @@ analyze_sample() {
     
     # 1. FastQC
     step 1 "Quality Control"
-    fastqc -t $threads -o $output_dir/fastqc $r1_path $r2_path
+    if [ -f "$output_dir/.override_qc_gate" ] && [ -d "$output_dir/fastqc" ] && [ "$(ls -A $output_dir/fastqc 2>/dev/null)" ]; then
+        echo "  ⚠️  [SUPERVISOR] Operator Override active — FastQC reports already exist. Fast-forwarding..."
+    else
+        fastqc -t $threads -o $output_dir/fastqc $r1_path $r2_path
+    fi
     echo "✅ QC complete"
     
-    # 2. Trimming
-    step 2 "Read Trimming"
-    fastp -i $r1_path -I $r2_path \
-        -o $output_dir/trimmed/r1_trimmed.fastq.gz \
-        -O $output_dir/trimmed/r2_trimmed.fastq.gz \
-        -h $output_dir/trimmed/fastp_report.html \
-        -j $output_dir/trimmed/fastp_report.json \
-        --thread $threads \
-        --detect_adapter_for_pe \
-        --length_required 50 \
-        --qualified_quality_phred 20
+    # 2. Read Trimming & Remediation — Layer 2 Execution Worker & Supervisor Gate
+    # Universal execution of fastp with autonomous Supervisor remediation loop.
+    # Supervisor evaluates fastp_report.json against qc.json:
+    #   - 0: Approved (Clinical or Research Grade Flag & Continue) -> advance
+    #   - 42: Remediation required -> re-runs fastp with tighter parameters (retry <= 2)
+    #   - 1: Rejection floor or hardware failure -> halts pipeline before Alignment
+    step 2 "Read Trimming & Remediation"
+    
+    # ── Check for Operator Override Fast-Forward ──
+    # If the user clicked Override & Force Run and trimmed reads already exist, resume directly without re-computing
+    if [ -f "$output_dir/.override_qc_gate" ] && [ -f "$output_dir/trimmed/r1_trimmed.fastq.gz" ] && [ -f "$output_dir/trimmed/fastp_report.json" ]; then
+        echo "  ⚠️  [SUPERVISOR] Operator Override active with existing trimmed FASTQs."
+        echo "  Executing gate evaluation to apply override and resuming straight to Alignment..."
+        node "$SCRIPT_DIR/scripts/stage1_qc_gate.js" "$output_dir" "$sample_name"
+        gate_status=$?
+        if [ "$gate_status" -eq 0 ]; then
+            echo "✅ Stage 1 QC Authorized via Operator Override. Proceeding directly to Alignment."
+        else
+            echo "❌ [SUPERVISOR] Gate evaluation failed with code $gate_status"
+            exit $gate_status
+        fi
+    else
+        # Fresh / Normal run: ensure no lingering retry flags or stale reports from previous runs
+        rm -f "$output_dir/trimmed/.retry_count" "$output_dir/trimmed/.remediation_flags" "$output_dir/trimmed/fastp_report.json"
+        extra_qc_flags=""
+        qc_attempt=0
+        max_qc_attempts=3
+        while [ $qc_attempt -lt $max_qc_attempts ]; do
+            qc_attempt=$((qc_attempt + 1))
+            # Clear fastp_report.json before run to prevent stale report if tool crashes
+            rm -f "$output_dir/trimmed/fastp_report.json"
+
+            if [ -n "$extra_qc_flags" ]; then
+                echo "  [QC AGENT] Executing fastp with Supervisor trimming parameters (Attempt $qc_attempt): $extra_qc_flags"
+                fastp_args="--detect_adapter_for_pe $extra_qc_flags"
+            else
+                echo "  [SUPERVISOR] Profiling raw read quality & adapter content (pass-through)..."
+                fastp_args="--detect_adapter_for_pe --disable_quality_filtering"
+            fi
+            
+            set +e
+            fastp -i "$r1_path" -I "$r2_path" \
+                -o "$output_dir/trimmed/r1_trimmed.fastq.gz" \
+                -O "$output_dir/trimmed/r2_trimmed.fastq.gz" \
+                --unpaired1 "$output_dir/trimmed/r1_unpaired.fastq.gz" \
+                --unpaired2 "$output_dir/trimmed/r2_unpaired.fastq.gz" \
+                $fastp_args \
+                --thread $threads \
+                -h "$output_dir/trimmed/fastp_report.html" \
+                -j "$output_dir/trimmed/fastp_report.json"
+            fastp_status=$?
+            set -e
+
+            if [ $fastp_status -ne 0 ]; then
+                echo "❌ [SUPERVISOR] fastp failed with exit code $fastp_status (binary crash or IO failure)."
+            fi
+            
+            # ── Supervisor Gate & Two-Tier Reviewer Evaluation (qc.json) ──
+            set +e
+            node "$SCRIPT_DIR/scripts/stage1_qc_gate.js" "$output_dir" "$sample_name"
+            gate_status=$?
+            set -e
+            
+            if [ "$gate_status" -eq 0 ]; then
+                echo "✅ Stage 1 QC Approved by Supervisor. Proceeding to Alignment."
+                break
+            elif [ "$gate_status" -eq 42 ]; then
+                if [ -f "$output_dir/trimmed/.remediation_flags" ]; then
+                    extra_qc_flags=$(cat "$output_dir/trimmed/.remediation_flags")
+                    echo "  [SUPERVISOR] Quality in 20-30 range. Executing trimming loop (Attempt $qc_attempt of $max_qc_attempts): $extra_qc_flags"
+                fi
+                continue
+            elif [ "$gate_status" -eq 2 ]; then
+                echo "❌ [SUPERVISOR] Stage 1 QC Tool Failure: fastp crashed or failed to emit valid reports. Execution halted."
+                exit 2
+            else
+                echo "❌ [SUPERVISOR] Stage 1 QC Critical Biological Rejection (Phred < 20). Operator opinion required."
+                exit 1
+            fi
+        done
+
+        if [ "$gate_status" -ne 0 ]; then
+            echo "❌ [SUPERVISOR] Maximum QC remediation attempts ($max_qc_attempts) exceeded without reaching quality threshold."
+            exit 1
+        fi
+    fi
     echo "✅ Trimming complete"
     
-    # 3. Alignment
-    step 3 "Read Alignment"
-    bwa mem -t $threads \
-        -R "@RG\tID:${sample_name}\tSM:${sample_name}\tPL:ILLUMINA\tLB:lib_${sample_name}\tPU:unit1" \
-        $REFERENCE \
-        $output_dir/trimmed/r1_trimmed.fastq.gz \
-        $output_dir/trimmed/r2_trimmed.fastq.gz \
-        > $output_dir/aligned/aligned.sam
-    echo "✅ Alignment complete"
+    # 3. Alignment & Coordinate Sorting (Piped Streaming)
+    step 3 "Read Alignment & Coordinate Sorting"
+    mkdir -p $output_dir/aligned $output_dir/sorted $output_dir/dedup
     
-    # 4. SAM to BAM
-    step 4 "SAM to BAM"
-    samtools view -@ $threads -bS $output_dir/aligned/aligned.sam > $output_dir/aligned/aligned.bam
-    rm $output_dir/aligned/aligned.sam
-    echo "✅ Conversion complete"
+    # Layer 1 Storage Custodian: Remove any leftover orphaned SAM/BAM files from previous interrupted runs
+    rm -f $output_dir/aligned/aligned.sam $output_dir/aligned/aligned.bam
     
-    # 5. Sort
-    step 5 "BAM Sorting"
-    samtools sort -@ $threads -o $output_dir/sorted/sorted.bam $output_dir/aligned/aligned.bam
-    rm $output_dir/aligned/aligned.bam
-    samtools index $output_dir/sorted/sorted.bam
-    echo "✅ Sorting complete"
+    # ── Check for Operator Override Fast-Forward ──
+    if [ -f "$output_dir/.override_align_gate" ] && [ -s "$output_dir/sorted/sorted.bam" ] && [ -s "$output_dir/aligned/alignment_flagstat.txt" ]; then
+        echo "  ⚠️  [SUPERVISOR] Operator Override active with existing sorted BAM."
+        echo "  Executing gate evaluation to apply override and resuming straight to Deduplication..."
+        set +e
+        node "$SCRIPT_DIR/scripts/stage2_align_gate.js" "$output_dir" "$sample_name"
+        ALIGN_EXIT=$?
+        set -e
+        if [ $ALIGN_EXIT -eq 0 ]; then
+            echo "✅ Stage 2 Alignment Authorized via Operator Override. Proceeding directly to Deduplication."
+        else
+            echo "❌ [SUPERVISOR] Alignment gate evaluation failed with code $ALIGN_EXIT"
+            exit $ALIGN_EXIT
+        fi
+    else
+        # Read Stage 1 Supervisor Downstream Directives
+        BWA_FLAGS="-M -Y"
+        if [ -f "$output_dir/supervisor_reasoning.json" ]; then
+            CUSTOM_FLAGS=$(node -e '
+                try {
+                    const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+                    const flags = d?.downstreamDirectives?.bwaFlags;
+                    if (Array.isArray(flags) && flags.length) console.log(flags.join(" "));
+                    else if (typeof d?.downstreamDirectives?.bwaMemFlags === "string") console.log(d.downstreamDirectives.bwaMemFlags);
+                } catch(e) {}
+            ' "$output_dir/supervisor_reasoning.json" 2>/dev/null)
+            [ -n "$CUSTOM_FLAGS" ] && BWA_FLAGS="$CUSTOM_FLAGS"
+        fi
+        echo "  [SUPERVISOR DIRECTIVES] Injecting BWA-MEM flags: $BWA_FLAGS"
+        echo "  [STREAMING ALIGNMENT] Piping BWA-MEM directly to samtools sort (0 GB uncompressed SAM on disk)..."
+        
+        set +e
+        bwa mem -t $threads $BWA_FLAGS \
+            -R "@RG\tID:${sample_name}\tSM:${sample_name}\tPL:ILLUMINA\tLB:lib_${sample_name}\tPU:unit1" \
+            $REFERENCE \
+            $output_dir/trimmed/r1_trimmed.fastq.gz \
+            $output_dir/trimmed/r2_trimmed.fastq.gz \
+            | samtools sort -@ $threads -o $output_dir/sorted/sorted.bam -
+        bwa_pipe_status=( "${PIPESTATUS[@]}" )
+        set -e
+        
+        if [ ${bwa_pipe_status[0]:-0} -ne 0 ] || [ ${bwa_pipe_status[1]:-0} -ne 0 ] || [ ! -s "$output_dir/sorted/sorted.bam" ]; then
+            echo "❌ Alignment or sorting failed (BWA exit: ${bwa_pipe_status[0]:-0}, samtools sort exit: ${bwa_pipe_status[1]:-0}). Check disk space and memory."
+            exit 1
+        fi
+        
+        samtools index $output_dir/sorted/sorted.bam
+        echo "✅ Alignment & coordinate sorting complete"
+        
+        # 4. Alignment Metrics
+        step 4 "Alignment Metrics"
+        echo "  [ALIGNMENT METRICS] Computing flagstat, stats, and idxstats..."
+        samtools flagstat -@ $threads $output_dir/sorted/sorted.bam > $output_dir/aligned/alignment_flagstat.txt
+        samtools stats -@ $threads $output_dir/sorted/sorted.bam > $output_dir/aligned/alignment_stats.txt
+        samtools idxstats $output_dir/sorted/sorted.bam > $output_dir/aligned/alignment_idxstats.txt
+        echo "✅ Alignment metrics generated"
+        
+        # Stage 2: Alignment Cognitive Supervisor Gate
+        echo "  [SUPERVISOR] Evaluating Stage 2 Alignment metrics against clinical policies (qc.json)..."
+        set +e
+        node "$SCRIPT_DIR/scripts/stage2_align_gate.js" "$output_dir" "$sample_name"
+        ALIGN_EXIT=$?
+        set -e
+        
+        if [ $ALIGN_EXIT -ne 0 ]; then
+            if [ $ALIGN_EXIT -eq 1 ]; then
+                echo ""
+                echo "🛑 [PIPELINE HALTED] Alignment Quality Gate failed rejection floor (Mapping < 90% or Pairing < 85%)."
+                echo "   Human-in-the-Loop Operator Opinion Gate is required."
+                echo "   Use the Web Dashboard to either:"
+                echo "     1. [Abort & Re-sequence] (Recommended clinical action)"
+                echo "     2. [Override & Force Run] (High-Risk Research Mode)"
+                echo "   Or run: touch \"$output_dir/.override_align_gate\" and restart pipeline."
+                exit 1
+            elif [ $ALIGN_EXIT -eq 2 ]; then
+                echo "❌ [TOOL CRASH] Alignment output missing or corrupted. Pipeline halted."
+                exit 2
+            else
+                echo "❌ [ERROR] Unknown alignment gate error ($ALIGN_EXIT)."
+                exit 1
+            fi
+        fi
+    fi
+    echo "✅ Stage 2 Alignment Approved by Supervisor. Proceeding to Deduplication."
     
-    # 6. Mark Duplicates
-    step 6 "Mark Duplicates"
+    # 5. Duplicate Marking (formerly step 6)
+    step 5 "Mark Duplicates"
     $GATK MarkDuplicates \
         -I $output_dir/sorted/sorted.bam \
         -O $output_dir/dedup/dedup.bam \
         -M $output_dir/dedup/metrics.txt \
         --CREATE_INDEX true
+    
+    # Ensure index exists as both dedup.bai and dedup.bam.bai for universal tool compatibility
+    if [ -f "$output_dir/dedup/dedup.bai" ] && [ ! -f "$output_dir/dedup/dedup.bam.bai" ]; then
+        cp "$output_dir/dedup/dedup.bai" "$output_dir/dedup/dedup.bam.bai"
+    elif [ -f "$output_dir/dedup/dedup.bam.bai" ] && [ ! -f "$output_dir/dedup/dedup.bai" ]; then
+        cp "$output_dir/dedup/dedup.bam.bai" "$output_dir/dedup/dedup.bai"
+    fi
     echo "✅ Duplicates marked"
     
+    # Layer 1 Storage Custodian: Safe Space Reclamation
+    # Once dedup.bam is verified (>10 KB) and indexed, retire intermediate sorted.bam to save ~15-20 GB
+    DEDUP_SIZE=$(wc -c < "$output_dir/dedup/dedup.bam" 2>/dev/null || echo 0)
+    if [ "$DEDUP_SIZE" -gt 10240 ] && [ -f "$output_dir/dedup/dedup.bam.bai" -o -f "$output_dir/dedup/dedup.bai" ]; then
+        RECLAIM_KB=$(du -sk "$output_dir/sorted/sorted.bam" 2>/dev/null | awk '{print $1}')
+        echo "🧹 [L1 STORAGE CUSTODIAN] Reclaiming disk space: retiring intermediate sorted.bam (${RECLAIM_KB:-0} KB)..."
+        rm -f $output_dir/sorted/sorted.bam $output_dir/sorted/sorted.bam.bai $output_dir/sorted/sorted.bai
+        echo "   Active validated BAM for Genome Viewer & BQSR: dedup/dedup.bam"
+    fi
+    
+    # 7. Base Quality Score Recalibration (BQSR)
+    step 7 "Base Quality Score Recalibration"
+    BQSR_INPUT=$output_dir/dedup/dedup.bam
+    if [ -f "$KNOWN_DBSNP" ]; then
+        KS_ARGS="--known-sites $KNOWN_DBSNP"
+        [ -f "$KNOWN_MILLS" ] && KS_ARGS="$KS_ARGS --known-sites $KNOWN_MILLS"
+        [ -f "$KNOWN_INDELS" ] && KS_ARGS="$KS_ARGS --known-sites $KNOWN_INDELS"
+        $GATK BaseRecalibrator \
+            -I $output_dir/dedup/dedup.bam \
+            -R $REFERENCE \
+            $KS_ARGS \
+            -O $output_dir/bqsr/recal_data.table
+        $GATK ApplyBQSR \
+            -I $output_dir/dedup/dedup.bam \
+            -R $REFERENCE \
+            --bqsr-recal-file $output_dir/bqsr/recal_data.table \
+            -O $output_dir/bqsr/recal.bam
+        BQSR_INPUT=$output_dir/bqsr/recal.bam
+        echo "✅ BQSR complete — recalibrated BAM ready for calling"
+    else
+        echo "⚠️  Known-sites (dbSNP/Mills) not found in reference/known-sites/ — SKIPPING BQSR; using dedup.bam."
+        echo "    Install known-sites VCFs to enable Base Quality Score Recalibration."
+    fi
+    
     # 7. Variant Calling
-    step 7 "Variant Calling"
+    step 8 "Variant Calling"
     $GATK HaplotypeCaller \
         -R $REFERENCE \
-        -I $output_dir/dedup/dedup.bam \
+        -I $BQSR_INPUT \
         -O $output_dir/variants/raw_variants.vcf \
         --native-pair-hmm-threads $threads
     
@@ -185,7 +390,7 @@ analyze_sample() {
     echo "✅ Called $RAW_COUNT variants"
     
     # 8. Filtering
-    step 8 "Variant Filtering"
+    step 9 "Variant Filtering"
     $GATK VariantFiltration \
         -R $REFERENCE \
         -V $output_dir/variants/raw_variants.vcf \
@@ -205,7 +410,7 @@ analyze_sample() {
     grep -v "^#" $output_dir/filtered/filtered_variants.vcf | grep -w "PASS" >> $PASS_VCF
     
     # 9. ANNOVAR Annotation
-    step 9 "ANNOVAR Annotation"
+    step 10 "ANNOVAR Annotation"
     
     if [ -d "$ANNOVAR_DIR" ]; then
         perl $ANNOVAR_DIR/table_annovar.pl \
@@ -226,7 +431,7 @@ analyze_sample() {
     fi
     
     # 10. Basic Variant Type Separation
-    step 10 "Variant Type Separation"
+    step 11 "Variant Type Separation"
     
     ANNOT_FILE=$output_dir/annovar/annotated_${sample_name}.hg19_multianno.txt
     if [ -f "$ANNOT_FILE" ]; then
@@ -259,7 +464,7 @@ analyze_sample() {
     # ═══════════════════════════════════════════════════════════════
     
     # 11. snpEff Annotation
-    step 11 "snpEff Annotation"
+    step 12 "snpEff Annotation"
     
     if [ -f "$SNPEFF_DIR/snpEff.jar" ] && [ -f "$PASS_VCF" ]; then
         java -Xmx8g -jar $SNPEFF_DIR/snpEff.jar \
@@ -270,12 +475,31 @@ analyze_sample() {
             > $output_dir/annovar/snpeff/${sample_name}_snpEff_annotated.vcf
         
         echo "✅ snpEff annotation complete"
+
+        # 11b. SnpSift dbSNP CAF frequency annotation
+        if [ -f "$SNPEFF_DIR/SnpSift.jar" ] && [ -f "$KNOWN_DBSNP" ]; then
+            echo "  Annotating global allele frequency (CAF/COMMON) from dbSNP via SnpSift..."
+            java -jar $SNPEFF_DIR/SnpSift.jar annotate \
+                -tabix \
+                -info CAF,COMMON \
+                $KNOWN_DBSNP \
+                $output_dir/annovar/snpeff/${sample_name}_snpEff_annotated.vcf \
+                > $output_dir/annovar/snpeff/${sample_name}_final_annotated.vcf
+            
+            if [ -s "$output_dir/annovar/snpeff/${sample_name}_final_annotated.vcf" ]; then
+                mv $output_dir/annovar/snpeff/${sample_name}_final_annotated.vcf $output_dir/annovar/snpeff/${sample_name}_snpEff_annotated.vcf
+                echo "✅ SnpSift global frequency annotation complete"
+            else
+                rm -f $output_dir/annovar/snpeff/${sample_name}_final_annotated.vcf
+                echo "⚠️  SnpSift output empty, keeping snpEff VCF"
+            fi
+        fi
     else
         echo "⚠️  snpEff not found - skipping"
     fi
     
     # 12. Add Zygosity Information
-    step 12 "Adding Zygosity Information"
+    step 13 "Adding Zygosity Information"
     
     ANNOT_TXT=$output_dir/annovar/annotated_${sample_name}.hg19_multianno.txt
     ANNOT_WITH_ZYG=$output_dir/annovar/annotated_${sample_name}_with_zygosity.txt
@@ -342,7 +566,7 @@ PYTHON_SCRIPT
     fi
     
     # 13. Advanced Functional Separation
-    step 13 "Advanced Functional Separation"
+    step 14 "Advanced Functional Separation"
     
     FUNC_DIR=$output_dir/annovar/functional_classification
     mkdir -p $FUNC_DIR
@@ -405,7 +629,7 @@ echo ""
 
 detect_samples "$DATA_DIR"
 
-if [ ${#SAMPLE_PAIRS[@]} -eq 0 ]; then
+if [ ${#SAMPLE_NAMES[@]} -eq 0 ]; then
     echo "❌ No FASTQ pairs found in $DATA_DIR"
     echo ""
     echo "Expected file naming:"
@@ -417,10 +641,12 @@ if [ ${#SAMPLE_PAIRS[@]} -eq 0 ]; then
     exit 1
 fi
 
-echo "✅ Detected ${#SAMPLE_PAIRS[@]} sample(s):"
+echo "✅ Detected ${#SAMPLE_NAMES[@]} sample(s):"
 echo ""
-for sample in "${!SAMPLE_PAIRS[@]}"; do
-    IFS=',' read -r r1 r2 <<< "${SAMPLE_PAIRS[$sample]}"
+for idx in "${!SAMPLE_NAMES[@]}"; do
+    sample="${SAMPLE_NAMES[$idx]}"
+    r1="${SAMPLE_R1S[$idx]}"
+    r2="${SAMPLE_R2S[$idx]}"
     echo "  Sample: $sample"
     echo "    R1: $(basename $r1)"
     echo "    R2: $(basename $r2)"
@@ -443,12 +669,14 @@ echo ""
 
 # Process each sample
 counter=1
-for sample in "${!SAMPLE_PAIRS[@]}"; do
-    IFS=',' read -r r1 r2 <<< "${SAMPLE_PAIRS[$sample]}"
+for idx in "${!SAMPLE_NAMES[@]}"; do
+    sample="${SAMPLE_NAMES[$idx]}"
+    r1="${SAMPLE_R1S[$idx]}"
+    r2="${SAMPLE_R2S[$idx]}"
     
     echo ""
     echo "╔════════════════════════════════════════════════════════════╗"
-    echo "║  Sample $counter of ${#SAMPLE_PAIRS[@]}: $sample"
+    echo "║  Sample $counter of ${#SAMPLE_NAMES[@]}: $sample"
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""
     
@@ -685,4 +913,3 @@ echo "VCF files are compressed and ready for IGV viewing!"
 echo ""
 echo "════════════════════════════════════════════════════════════"
 echo ""
-
