@@ -370,8 +370,8 @@ analyze_sample() {
             # Standard Illumina 7-field header: @<instrument>:<run>:<flowcell>:<lane>:<tile>:<x>:<y>
             if [[ "$FIRST_READ_HEADER" =~ ^@([^:]+):[0-9]+:([^:]+):[0-9]+:[0-9]+:[0-9]+:[0-9]+ ]]; then
                 INSTRUMENT_ID="${BASH_REMATCH[1]}"
-                # Non-patterned flowcell instruments: MiSeq (M), NextSeq 500/550 (NB, NS), HiSeq 2000/2500 (D, SN)
-                if [[ "$INSTRUMENT_ID" =~ ^(M[0-9]|NB[0-9]|NS[0-9]|D[0-9]|SN[0-9]) ]]; then
+                # Non-patterned flowcell instruments: MiSeq (M), MiniSeq (MN), NextSeq 500/550 (NB, NS), HiSeq 2000/2500 (D, SN, HWI-), GAIIx (HWUSI-)
+                if [[ "$INSTRUMENT_ID" =~ ^(M[0-9]|MN[0-9]|NB[0-9]|NS[0-9]|D[0-9]|SN[0-9]|HWI-|HWUSI-) ]]; then
                     DETECTED_OPTICAL_DIST=100
                     echo "  ℹ️  [FLOWCELL DETECTION] Detected non-patterned flowcell (Instrument: $INSTRUMENT_ID). Setting optical distance to 100 pixels."
                 else
@@ -383,8 +383,8 @@ analyze_sample() {
             fi
         fi
 
-        # Read Stage 2 Downstream Directives (e.g. optical distance or picard flags)
-        PICARD_EXTRA="--OPTICAL_DUPLICATE_PIXEL_DISTANCE $DETECTED_OPTICAL_DIST"
+        # Read Stage 2 Downstream Directives (extra picard flags)
+        PICARD_EXTRA=""
         if [ -f "$output_dir/stage2_alignment_reasoning.json" ]; then
             CUSTOM_PICARD=$(node -e '
                 try {
@@ -395,8 +395,10 @@ analyze_sample() {
             ' "$output_dir/stage2_alignment_reasoning.json" 2>/dev/null)
             [ -n "$CUSTOM_PICARD" ] && PICARD_EXTRA="$CUSTOM_PICARD"
         fi
-        # Sanitize PICARD_EXTRA: ensure --CREATE_INDEX is stripped so it is never passed twice to GATK
-        CLEAN_PICARD_EXTRA=$(echo "$PICARD_EXTRA" | sed -E 's/--CREATE_INDEX[ =]+(true|false)//g')
+        # --CREATE_INDEX and the optical distance are set here only; GATK rejects any argument given twice,
+        # and the flowcell-detected distance must win over any directive value.
+        CLEAN_PICARD_EXTRA=$(echo "$PICARD_EXTRA" | sed -E 's/--CREATE_INDEX[ =]+(true|false)//g; s/--OPTICAL_DUPLICATE_PIXEL_DISTANCE[ =]+[0-9]+//g')
+        CLEAN_PICARD_EXTRA="$CLEAN_PICARD_EXTRA --OPTICAL_DUPLICATE_PIXEL_DISTANCE $DETECTED_OPTICAL_DIST"
         echo "  [SUPERVISOR DIRECTIVES] Injecting MarkDuplicates parameters: $CLEAN_PICARD_EXTRA"
         
         $GATK MarkDuplicates \
@@ -867,7 +869,7 @@ EOF
         fi
         
         # Annotation
-        ANNOT_FILE=$(find "$RESULT_DIR/annovar" -name "*.hg19_multianno.txt" 2>/dev/null | head -1)
+        ANNOT_FILE=$(find "$RESULT_DIR/annovar" -name "*.hg19_multianno.txt" 2>/dev/null | head -1 || true)
         if [ -f "$ANNOT_FILE" ]; then
             PATHOGENIC=$(grep -i "pathogenic" "$ANNOT_FILE" 2>/dev/null | wc -l)
             cat >> $SUMMARY_FILE << EOF
