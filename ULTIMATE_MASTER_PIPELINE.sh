@@ -793,9 +793,9 @@ EOF
         
         # Separated types
         if [ -d "$RESULT_DIR/annovar/separated_by_type" ]; then
-            SNPS=$(($(wc -l < "$RESULT_DIR/annovar/separated_by_type/SNPs.txt" 2>/dev/null || echo 1) - 1))
-            INS=$(($(wc -l < "$RESULT_DIR/annovar/separated_by_type/Insertions.txt" 2>/dev/null || echo 1) - 1))
-            DEL=$(($(wc -l < "$RESULT_DIR/annovar/separated_by_type/Deletions.txt" 2>/dev/null || echo 1) - 1))
+            SNPS=$([ -f "$RESULT_DIR/annovar/separated_by_type/SNPs.txt" ] && echo $(($(wc -l < "$RESULT_DIR/annovar/separated_by_type/SNPs.txt") - 1)) || echo 0)
+            INS=$([ -f "$RESULT_DIR/annovar/separated_by_type/Insertions.txt" ] && echo $(($(wc -l < "$RESULT_DIR/annovar/separated_by_type/Insertions.txt") - 1)) || echo 0)
+            DEL=$([ -f "$RESULT_DIR/annovar/separated_by_type/Deletions.txt" ] && echo $(($(wc -l < "$RESULT_DIR/annovar/separated_by_type/Deletions.txt") - 1)) || echo 0)
             
             cat >> $SUMMARY_FILE << EOF
   
@@ -808,9 +808,9 @@ EOF
         
         # Functional classification
         if [ -d "$RESULT_DIR/annovar/functional_classification" ]; then
-            NONSYN=$(($(wc -l < "$RESULT_DIR/annovar/functional_classification/Exonic_Nonsynonymous.txt" 2>/dev/null || echo 1) - 1))
-            SYN=$(($(wc -l < "$RESULT_DIR/annovar/functional_classification/Exonic_Synonymous.txt" 2>/dev/null || echo 1) - 1))
-            STOP=$(($(wc -l < "$RESULT_DIR/annovar/functional_classification/Exonic_Stopgain.txt" 2>/dev/null || echo 1) - 1))
+            NONSYN=$([ -f "$RESULT_DIR/annovar/functional_classification/Exonic_Nonsynonymous.txt" ] && echo $(($(wc -l < "$RESULT_DIR/annovar/functional_classification/Exonic_Nonsynonymous.txt") - 1)) || echo 0)
+            SYN=$([ -f "$RESULT_DIR/annovar/functional_classification/Exonic_Synonymous.txt" ] && echo $(($(wc -l < "$RESULT_DIR/annovar/functional_classification/Exonic_Synonymous.txt") - 1)) || echo 0)
+            STOP=$([ -f "$RESULT_DIR/annovar/functional_classification/Exonic_Stopgain.txt" ] && echo $(($(wc -l < "$RESULT_DIR/annovar/functional_classification/Exonic_Stopgain.txt") - 1)) || echo 0)
             
             cat >> $SUMMARY_FILE << EOF
   
@@ -885,7 +885,8 @@ zip -r $ZIP_NAME \
     -x "*.bam" "*.sam" "*.fastq.gz" "*.avinput" "*_dropped" "*_filtered" "raw_variants.vcf" "filtered_variants.vcf" "filtered_PASS_only.vcf" \
     2>/dev/null
 
-ZIP_SIZE=$(du -sh $ZIP_NAME | cut -f1)
+ZIP_SIZE=$(du -sh "$ZIP_NAME" 2>/dev/null | cut -f1 || echo "N/A")
+[ -z "$ZIP_SIZE" ] && ZIP_SIZE="N/A"
 
 echo ""
 echo "╔════════════════════════════════════════════════════════════╗"
