@@ -88,3 +88,6 @@ tools/snpEff/data/*/
 *.fa.gz
 *.fasta.gz
 
+reference/known-sites/
+reference/install_status.txt
+MASTER_ANALYSIS_SUMMARY.txt

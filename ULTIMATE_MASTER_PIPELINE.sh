@@ -456,28 +456,132 @@ analyze_sample() {
         fi
     fi
     
-    # 7. Base Quality Score Recalibration (BQSR)
-    step 7 "Base Quality Score Recalibration"
-    BQSR_INPUT=$output_dir/dedup/dedup.bam
-    if [ -f "$KNOWN_DBSNP" ]; then
-        KS_ARGS="--known-sites $KNOWN_DBSNP"
-        [ -f "$KNOWN_MILLS" ] && KS_ARGS="$KS_ARGS --known-sites $KNOWN_MILLS"
-        [ -f "$KNOWN_INDELS" ] && KS_ARGS="$KS_ARGS --known-sites $KNOWN_INDELS"
-        $GATK BaseRecalibrator \
-            -I $output_dir/dedup/dedup.bam \
-            -R $REFERENCE \
-            $KS_ARGS \
-            -O $output_dir/bqsr/recal_data.table
-        $GATK ApplyBQSR \
-            -I $output_dir/dedup/dedup.bam \
-            -R $REFERENCE \
-            --bqsr-recal-file $output_dir/bqsr/recal_data.table \
-            -O $output_dir/bqsr/recal.bam
-        BQSR_INPUT=$output_dir/bqsr/recal.bam
-        echo "✅ BQSR complete — recalibrated BAM ready for calling"
+    # ── Checkpoint: Stage 4 (Base Quality Score Recalibration) ──
+    stage4_approved=0
+    has_bqsr_output=0
+    # Check if recal.bam exists and is indexed, OR if BQSR was bypassed under research protocol
+    if [ -s "$output_dir/bqsr/recal.bam" ] && [ -s "$output_dir/bqsr/recal_data.table" ]; then
+        if [ -f "$output_dir/bqsr/recal.bam.bai" ] || [ -f "$output_dir/bqsr/recal.bai" ]; then
+            has_bqsr_output=1
+        fi
+    elif [ -f "$output_dir/.bqsr_bypassed" ] && [ -s "$output_dir/dedup/dedup.bam" ]; then
+        has_bqsr_output=1
+    fi
+
+    if [ $has_bqsr_output -eq 1 ]; then
+        if [ -f "$output_dir/.override_bqsr_gate" ]; then
+            echo "  ⚠️  [SUPERVISOR] Operator Override active with existing BQSR output."
+            echo "  Executing gate evaluation to apply override and resuming straight to Variant Calling..."
+            set +e
+            node "$SCRIPT_DIR/scripts/stage4_bqsr_gate.js" "$output_dir" "$sample_name"
+            BQSR_EXIT=$?
+            set -e
+            if [ $BQSR_EXIT -eq 0 ]; then
+                echo "✅ Stage 4 BQSR Authorized via Operator Override. Proceeding directly to Variant Calling."
+                stage4_approved=1
+            else
+                echo "❌ [SUPERVISOR] BQSR gate evaluation failed with code $BQSR_EXIT"
+                exit $BQSR_EXIT
+            fi
+        elif [ -f "$output_dir/stage4_bqsr_reasoning.json" ]; then
+            s4_tier=$(grep '"tier":' "$output_dir/stage4_bqsr_reasoning.json" 2>/dev/null || echo "")
+            # Explicit allowlist of approved tiers: TIER_1 (clinical BQSR), RESEARCH, or OVERRIDDEN
+            if [[ "$s4_tier" == *"TIER_1"* || "$s4_tier" == *"RESEARCH"* || "$s4_tier" == *"OVERRID"* ]]; then
+                stage4_approved=1
+            fi
+        fi
+    fi
+
+    if [ $stage4_approved -eq 1 ]; then
+        echo "⏩ [CHECKPOINT] Stage 4 (Base Quality Score Recalibration) already completed and approved. Skipping to Variant Calling..."
+        if [ -s "$output_dir/bqsr/recal.bam" ]; then
+            BQSR_INPUT=$output_dir/bqsr/recal.bam
+        else
+            BQSR_INPUT=$output_dir/dedup/dedup.bam
+        fi
     else
-        echo "⚠️  Known-sites (dbSNP/Mills) not found in reference/known-sites/ — SKIPPING BQSR; using dedup.bam."
-        echo "    Install known-sites VCFs to enable Base Quality Score Recalibration."
+        step 7 "Base Quality Score Recalibration"
+        mkdir -p "$output_dir/bqsr"
+        BQSR_INPUT=$output_dir/dedup/dedup.bam
+
+        if [ -f "$KNOWN_DBSNP" ]; then
+            rm -f "$output_dir/.bqsr_bypassed"
+            KS_ARGS="--known-sites $KNOWN_DBSNP"
+            [ -f "$KNOWN_MILLS" ] && KS_ARGS="$KS_ARGS --known-sites $KNOWN_MILLS"
+            [ -f "$KNOWN_INDELS" ] && KS_ARGS="$KS_ARGS --known-sites $KNOWN_INDELS"
+
+            echo "  [EXECUTION AGENT] Running GATK BaseRecalibrator with reference-matched known-sites..."
+            $GATK BaseRecalibrator \
+                -I $output_dir/dedup/dedup.bam \
+                -R $REFERENCE \
+                $KS_ARGS \
+                -O $output_dir/bqsr/recal_data.table
+
+            echo "  [EXECUTION AGENT] Running GATK ApplyBQSR to write recalibrated BAM..."
+            $GATK ApplyBQSR \
+                -I $output_dir/dedup/dedup.bam \
+                -R $REFERENCE \
+                --bqsr-recal-file $output_dir/bqsr/recal_data.table \
+                -O $output_dir/bqsr/recal.bam
+
+            # Ensure index exists as both recal.bai and recal.bam.bai
+            if [ ! -f "$output_dir/bqsr/recal.bam.bai" ] && [ ! -f "$output_dir/bqsr/recal.bai" ]; then
+                echo "  [INDEXING] Indexing recalibrated BAM..."
+                samtools index "$output_dir/bqsr/recal.bam"
+            fi
+            if [ -f "$output_dir/bqsr/recal.bai" ] && [ ! -f "$output_dir/bqsr/recal.bam.bai" ]; then
+                cp "$output_dir/bqsr/recal.bai" "$output_dir/bqsr/recal.bam.bai"
+            elif [ -f "$output_dir/bqsr/recal.bam.bai" ] && [ ! -f "$output_dir/bqsr/recal.bai" ]; then
+                cp "$output_dir/bqsr/recal.bam.bai" "$output_dir/bqsr/recal.bai"
+            fi
+
+            BQSR_INPUT=$output_dir/bqsr/recal.bam
+            echo "✅ Base quality recalibration applied"
+        else
+            echo "⚠️  Known-sites (dbSNP/Mills) not found in reference/known-sites/ — BYPASSING BQSR; using dedup.bam."
+            echo "    Install known-sites VCFs to enable full Base Quality Score Recalibration."
+            touch "$output_dir/.bqsr_bypassed"
+            BQSR_INPUT=$output_dir/dedup/dedup.bam
+        fi
+
+        # Stage 4: BQSR Cognitive Supervisor Gate
+        echo "  [SUPERVISOR] Evaluating Stage 4 BQSR metrics against clinical policies (qc.json)..."
+        set +e
+        node "$SCRIPT_DIR/scripts/stage4_bqsr_gate.js" "$output_dir" "$sample_name"
+        BQSR_EXIT=$?
+        set -e
+
+        if [ $BQSR_EXIT -ne 0 ]; then
+            if [ $BQSR_EXIT -eq 1 ]; then
+                echo ""
+                echo "🛑 [PIPELINE HALTED] BQSR Quality Gate failed rejection floor (Drift > 8.0 Phred or Observations < 50M)."
+                echo "   Human-in-the-Loop Operator Opinion Gate is required."
+                echo "   Use the Web Dashboard to either:"
+                echo "     1. [Abort Pipeline] (Recommended clinical action)"
+                echo "     2. [Override & Force Run] (High-Risk Research Mode)"
+                echo "   Or run: touch \"$output_dir/.override_bqsr_gate\" and restart pipeline."
+                exit 1
+            elif [ $BQSR_EXIT -eq 2 ]; then
+                echo "❌ [TOOL CRASH] BQSR output missing or corrupted. Pipeline halted."
+                exit 2
+            else
+                echo "❌ [ERROR] Unknown BQSR gate error ($BQSR_EXIT)."
+                exit 1
+            fi
+        fi
+        echo "✅ Stage 4 BQSR Approved by Supervisor. Proceeding to Variant Calling."
+    fi
+
+    # Layer 1 Storage Custodian: Safe Space Reclamation
+    # Once Stage 4 gate approves (standard or override) and recal.bam is verified (>10 KB, indexed), safely retire intermediate dedup.bam
+    RECAL_SIZE=$(wc -c < "$output_dir/bqsr/recal.bam" 2>/dev/null || echo 0)
+    if [ "$RECAL_SIZE" -gt 10240 ] && [ -f "$output_dir/bqsr/recal.bam.bai" -o -f "$output_dir/bqsr/recal.bai" ]; then
+        if [ -f "$output_dir/dedup/dedup.bam" ]; then
+            RECLAIM_DEDUP_KB=$(du -sk "$output_dir/dedup/dedup.bam" 2>/dev/null | awk '{print $1}')
+            echo "🧹 [L1 STORAGE CUSTODIAN] Reclaiming disk space: retiring intermediate dedup.bam (${RECLAIM_DEDUP_KB:-0} KB)..."
+            rm -f $output_dir/dedup/dedup.bam $output_dir/dedup/dedup.bam.bai $output_dir/dedup/dedup.bai
+            echo "   Active validated BAM for Genome Viewer & Calling: bqsr/recal.bam"
+        fi
     fi
     
     # 7. Variant Calling
