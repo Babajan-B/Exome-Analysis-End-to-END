@@ -125,6 +125,7 @@ analyze_sample() {
     # State hygiene: purge stale halt and reasoning artifacts from previous runs
     rm -f "$output_dir/supervisor_reasoning.json" \
           "$output_dir/stage2_alignment_reasoning.json" \
+          "$output_dir/stage3_dedup_reasoning.json" \
           "$output_dir/halt_report.json" \
           "$output_dir"/*.applied
     
@@ -338,28 +339,89 @@ analyze_sample() {
     
     # 5. Duplicate Marking (formerly step 6)
     step 5 "Mark Duplicates"
-    $GATK MarkDuplicates \
-        -I $output_dir/sorted/sorted.bam \
-        -O $output_dir/dedup/dedup.bam \
-        -M $output_dir/dedup/metrics.txt \
-        --CREATE_INDEX true
     
-    # Ensure index exists as both dedup.bai and dedup.bam.bai for universal tool compatibility
-    if [ -f "$output_dir/dedup/dedup.bai" ] && [ ! -f "$output_dir/dedup/dedup.bam.bai" ]; then
-        cp "$output_dir/dedup/dedup.bai" "$output_dir/dedup/dedup.bam.bai"
-    elif [ -f "$output_dir/dedup/dedup.bam.bai" ] && [ ! -f "$output_dir/dedup/dedup.bai" ]; then
-        cp "$output_dir/dedup/dedup.bam.bai" "$output_dir/dedup/dedup.bai"
+    # ── Check for Operator Override Fast-Forward ──
+    if [ -f "$output_dir/.override_dedup_gate" ] && [ -s "$output_dir/dedup/dedup.bam" ] && [ -s "$output_dir/dedup/metrics.txt" ]; then
+        echo "  ⚠️  [SUPERVISOR] Operator Override active with existing deduplicated BAM."
+        echo "  Executing gate evaluation to apply override and resuming straight to BQSR..."
+        set +e
+        node "$SCRIPT_DIR/scripts/stage3_dedup_gate.js" "$output_dir" "$sample_name"
+        DEDUP_EXIT=$?
+        set -e
+        if [ $DEDUP_EXIT -eq 0 ]; then
+            echo "✅ Stage 3 Deduplication Authorized via Operator Override. Proceeding directly to BQSR."
+        else
+            echo "❌ [SUPERVISOR] Deduplication gate evaluation failed with code $DEDUP_EXIT"
+            exit $DEDUP_EXIT
+        fi
+    else
+        # Read Stage 2 Downstream Directives (e.g. optical distance or picard flags)
+        PICARD_EXTRA="--OPTICAL_DUPLICATE_PIXEL_DISTANCE 2500"
+        if [ -f "$output_dir/stage2_alignment_reasoning.json" ]; then
+            CUSTOM_PICARD=$(node -e '
+                try {
+                    const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+                    const flags = d?.downstreamDirectives?.picardFlags;
+                    if (Array.isArray(flags) && flags.length) console.log(flags.join(" "));
+                } catch(e) {}
+            ' "$output_dir/stage2_alignment_reasoning.json" 2>/dev/null)
+            [ -n "$CUSTOM_PICARD" ] && PICARD_EXTRA="$CUSTOM_PICARD"
+        fi
+        echo "  [SUPERVISOR DIRECTIVES] Injecting MarkDuplicates parameters: $PICARD_EXTRA"
+        
+        $GATK MarkDuplicates \
+            -I $output_dir/sorted/sorted.bam \
+            -O $output_dir/dedup/dedup.bam \
+            -M $output_dir/dedup/metrics.txt \
+            --CREATE_INDEX true \
+            $PICARD_EXTRA
+        
+        # Ensure index exists as both dedup.bai and dedup.bam.bai for universal tool compatibility
+        if [ -f "$output_dir/dedup/dedup.bai" ] && [ ! -f "$output_dir/dedup/dedup.bam.bai" ]; then
+            cp "$output_dir/dedup/dedup.bai" "$output_dir/dedup/dedup.bam.bai"
+        elif [ -f "$output_dir/dedup/dedup.bam.bai" ] && [ ! -f "$output_dir/dedup/dedup.bai" ]; then
+            cp "$output_dir/dedup/dedup.bam.bai" "$output_dir/dedup/dedup.bai"
+        fi
+        echo "✅ Duplicates marked"
+        
+        # Stage 3: Deduplication Cognitive Supervisor Gate
+        echo "  [SUPERVISOR] Evaluating Stage 3 Deduplication metrics against clinical policies (qc.json)..."
+        set +e
+        node "$SCRIPT_DIR/scripts/stage3_dedup_gate.js" "$output_dir" "$sample_name"
+        DEDUP_EXIT=$?
+        set -e
+        
+        if [ $DEDUP_EXIT -ne 0 ]; then
+            if [ $DEDUP_EXIT -eq 1 ]; then
+                echo ""
+                echo "🛑 [PIPELINE HALTED] Deduplication Quality Gate failed rejection floor (Duplication >= 25% or Library < 10M)."
+                echo "   Human-in-the-Loop Operator Opinion Gate is required."
+                echo "   Use the Web Dashboard to either:"
+                echo "     1. [Abort & Re-prepare Library] (Recommended clinical action)"
+                echo "     2. [Override & Force Run] (High-Risk Research Mode)"
+                echo "   Or run: touch \"$output_dir/.override_dedup_gate\" and restart pipeline."
+                exit 1
+            elif [ $DEDUP_EXIT -eq 2 ]; then
+                echo "❌ [TOOL CRASH] Deduplication output missing or corrupted. Pipeline halted."
+                exit 2
+            else
+                echo "❌ [ERROR] Unknown deduplication gate error ($DEDUP_EXIT)."
+                exit 1
+            fi
+        fi
+        echo "✅ Stage 3 Deduplication Approved by Supervisor. Proceeding to BQSR."
     fi
-    echo "✅ Duplicates marked"
     
     # Layer 1 Storage Custodian: Safe Space Reclamation
-    # Once dedup.bam is verified (>10 KB) and indexed, retire intermediate sorted.bam to save ~15-20 GB
+    # Once Stage 3 gate approves (standard or override) and dedup.bam is verified (>10 KB, indexed), safely retire intermediate sorted.bam
     DEDUP_SIZE=$(wc -c < "$output_dir/dedup/dedup.bam" 2>/dev/null || echo 0)
     if [ "$DEDUP_SIZE" -gt 10240 ] && [ -f "$output_dir/dedup/dedup.bam.bai" -o -f "$output_dir/dedup/dedup.bai" ]; then
-        RECLAIM_KB=$(du -sk "$output_dir/sorted/sorted.bam" 2>/dev/null | awk '{print $1}')
-        echo "🧹 [L1 STORAGE CUSTODIAN] Reclaiming disk space: retiring intermediate sorted.bam (${RECLAIM_KB:-0} KB)..."
-        rm -f $output_dir/sorted/sorted.bam $output_dir/sorted/sorted.bam.bai $output_dir/sorted/sorted.bai
-        echo "   Active validated BAM for Genome Viewer & BQSR: dedup/dedup.bam"
+        if [ -f "$output_dir/sorted/sorted.bam" ]; then
+            RECLAIM_KB=$(du -sk "$output_dir/sorted/sorted.bam" 2>/dev/null | awk '{print $1}')
+            echo "🧹 [L1 STORAGE CUSTODIAN] Reclaiming disk space: retiring intermediate sorted.bam (${RECLAIM_KB:-0} KB)..."
+            rm -f $output_dir/sorted/sorted.bam $output_dir/sorted/sorted.bam.bai $output_dir/sorted/sorted.bai
+            echo "   Active validated BAM for Genome Viewer & BQSR: dedup/dedup.bam"
+        fi
     fi
     
     # 7. Base Quality Score Recalibration (BQSR)
