@@ -150,7 +150,8 @@ analyze_sample() {
             mv "$output_dir/.override_qc_gate" "$output_dir/.override_qc_gate.applied" 2>/dev/null || true
         elif [ -f "$output_dir/supervisor_reasoning.json" ]; then
             s1_tier=$(grep '"tier":' "$output_dir/supervisor_reasoning.json" 2>/dev/null || echo "")
-            if [[ "$s1_tier" != *"HALT"* && "$s1_tier" != *"CRASH"* ]]; then
+            # Explicit allowlist of approved tiers: TIER_1 (direct alignment), RESEARCH (qualified post-trim), or OVERRIDDEN
+            if [[ "$s1_tier" == *"TIER_1"* || "$s1_tier" == *"RESEARCH"* || "$s1_tier" == *"OVERRID"* ]]; then
                 stage1_approved=1
             fi
         fi
@@ -240,7 +241,8 @@ analyze_sample() {
             mv "$output_dir/.override_align_gate" "$output_dir/.override_align_gate.applied" 2>/dev/null || true
         elif [ -f "$output_dir/stage2_alignment_reasoning.json" ]; then
             s2_tier=$(grep '"tier":' "$output_dir/stage2_alignment_reasoning.json" 2>/dev/null || echo "")
-            if [[ "$s2_tier" != *"HALT"* && "$s2_tier" != *"CRASH"* ]]; then
+            # Explicit allowlist of approved tiers: TIER_1 (clinical alignment), RESEARCH, or OVERRIDDEN
+            if [[ "$s2_tier" == *"TIER_1"* || "$s2_tier" == *"RESEARCH"* || "$s2_tier" == *"OVERRID"* ]]; then
                 stage2_approved=1
             fi
         fi
@@ -320,26 +322,69 @@ analyze_sample() {
         echo "✅ Stage 2 Alignment Approved by Supervisor. Proceeding to Deduplication."
     fi
     
-    # 5. Duplicate Marking (formerly step 6)
-    step 5 "Mark Duplicates"
-    
-    # ── Check for Operator Override Fast-Forward ──
-    if [ -f "$output_dir/.override_dedup_gate" ] && [ -s "$output_dir/dedup/dedup.bam" ] && [ -s "$output_dir/dedup/metrics.txt" ]; then
-        echo "  ⚠️  [SUPERVISOR] Operator Override active with existing deduplicated BAM."
-        echo "  Executing gate evaluation to apply override and resuming straight to BQSR..."
-        set +e
-        node "$SCRIPT_DIR/scripts/stage3_dedup_gate.js" "$output_dir" "$sample_name"
-        DEDUP_EXIT=$?
-        set -e
-        if [ $DEDUP_EXIT -eq 0 ]; then
-            echo "✅ Stage 3 Deduplication Authorized via Operator Override. Proceeding directly to BQSR."
-        else
-            echo "❌ [SUPERVISOR] Deduplication gate evaluation failed with code $DEDUP_EXIT"
-            exit $DEDUP_EXIT
+    # ── Checkpoint: Stage 3 (Deduplication) ──
+    stage3_approved=0
+    has_dedup_bam=0
+    if [ -s "$output_dir/dedup/dedup.bam" ] && [ -s "$output_dir/dedup/metrics.txt" ]; then
+        if [ -f "$output_dir/dedup/dedup.bam.bai" ] || [ -f "$output_dir/dedup/dedup.bai" ]; then
+            has_dedup_bam=1
         fi
+    fi
+
+    if [ $has_dedup_bam -eq 1 ]; then
+        if [ -f "$output_dir/.override_dedup_gate" ]; then
+            echo "  ⚠️  [SUPERVISOR] Operator Override active with existing deduplicated BAM."
+            echo "  Executing gate evaluation to apply override and resuming straight to BQSR..."
+            set +e
+            node "$SCRIPT_DIR/scripts/stage3_dedup_gate.js" "$output_dir" "$sample_name"
+            DEDUP_EXIT=$?
+            set -e
+            if [ $DEDUP_EXIT -eq 0 ]; then
+                echo "✅ Stage 3 Deduplication Authorized via Operator Override. Proceeding directly to BQSR."
+                stage3_approved=1
+            else
+                echo "❌ [SUPERVISOR] Deduplication gate evaluation failed with code $DEDUP_EXIT"
+                exit $DEDUP_EXIT
+            fi
+        elif [ -f "$output_dir/stage3_dedup_reasoning.json" ]; then
+            s3_tier=$(grep '"tier":' "$output_dir/stage3_dedup_reasoning.json" 2>/dev/null || echo "")
+            # Explicit allowlist of approved tiers: TIER_1 (clinical dedup), RESEARCH, or OVERRIDDEN
+            if [[ "$s3_tier" == *"TIER_1"* || "$s3_tier" == *"RESEARCH"* || "$s3_tier" == *"OVERRID"* ]]; then
+                stage3_approved=1
+            fi
+        fi
+    fi
+
+    if [ $stage3_approved -eq 1 ]; then
+        echo "⏩ [CHECKPOINT] Stage 3 (Deduplication) already completed and approved. Skipping MarkDuplicates to BQSR..."
     else
+        step 5 "Mark Duplicates"
+        
+        # Dynamic Optical Pixel Distance Detection (Patterned vs Non-patterned Flowcells)
+        DETECTED_OPTICAL_DIST=2500
+        SAMPLE_R1_FASTQ="$output_dir/trimmed/r1_trimmed.fastq.gz"
+        [ ! -f "$SAMPLE_R1_FASTQ" ] && SAMPLE_R1_FASTQ="$r1_path"
+
+        if [ -f "$SAMPLE_R1_FASTQ" ]; then
+            FIRST_READ_HEADER=$(gzip -dc "$SAMPLE_R1_FASTQ" 2>/dev/null | head -n 1 || true)
+            # Standard Illumina 7-field header: @<instrument>:<run>:<flowcell>:<lane>:<tile>:<x>:<y>
+            if [[ "$FIRST_READ_HEADER" =~ ^@([^:]+):[0-9]+:([^:]+):[0-9]+:[0-9]+:[0-9]+:[0-9]+ ]]; then
+                INSTRUMENT_ID="${BASH_REMATCH[1]}"
+                # Non-patterned flowcell instruments: MiSeq (M), NextSeq 500/550 (NB, NS), HiSeq 2000/2500 (D, SN)
+                if [[ "$INSTRUMENT_ID" =~ ^(M[0-9]|NB[0-9]|NS[0-9]|D[0-9]|SN[0-9]) ]]; then
+                    DETECTED_OPTICAL_DIST=100
+                    echo "  ℹ️  [FLOWCELL DETECTION] Detected non-patterned flowcell (Instrument: $INSTRUMENT_ID). Setting optical distance to 100 pixels."
+                else
+                    echo "  ℹ️  [FLOWCELL DETECTION] Detected patterned flowcell (Instrument: $INSTRUMENT_ID). Setting optical distance to 2500 pixels."
+                fi
+            elif [ -n "$FIRST_READ_HEADER" ]; then
+                DETECTED_OPTICAL_DIST=100
+                echo "  ℹ️  [FLOWCELL DETECTION] Non-standard / SRA read headers detected. Optical distance set to 100 (optical duplicates unmeasurable from coordinates)."
+            fi
+        fi
+
         # Read Stage 2 Downstream Directives (e.g. optical distance or picard flags)
-        PICARD_EXTRA="--OPTICAL_DUPLICATE_PIXEL_DISTANCE 2500"
+        PICARD_EXTRA="--OPTICAL_DUPLICATE_PIXEL_DISTANCE $DETECTED_OPTICAL_DIST"
         if [ -f "$output_dir/stage2_alignment_reasoning.json" ]; then
             CUSTOM_PICARD=$(node -e '
                 try {
