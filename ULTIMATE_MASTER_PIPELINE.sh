@@ -226,9 +226,19 @@ analyze_sample() {
     stage1_approved=0
     if is_stage1_approved; then
         stage1_approved=1
-    elif [ -f "$output_dir/.override_qc_gate" ]; then
+    elif [ -f "$output_dir/.override_qc_gate" ] && [ -s "$output_dir/trimmed/r1_trimmed.fastq.gz" ] && [ -s "$output_dir/trimmed/fastp_report.json" ]; then
+        # Run the gate so it records TIER_3_OPERATOR_OVERRIDDEN, audits the decision, and archives the marker;
+        # otherwise the reasoning stays HALT and a later restart re-halts here.
+        echo "  ⚠️  [SUPERVISOR] Operator Override active with existing trimmed FASTQs. Applying override via Stage 1 gate..."
+        set +e
+        node "$SCRIPT_DIR/scripts/stage1_qc_gate.js" "$output_dir" "$sample_name"
+        S1_OVERRIDE_EXIT=$?
+        set -e
+        if [ $S1_OVERRIDE_EXIT -ne 0 ]; then
+            echo "❌ [SUPERVISOR] Stage 1 gate failed to apply override (code $S1_OVERRIDE_EXIT)"
+            exit $S1_OVERRIDE_EXIT
+        fi
         stage1_approved=1
-        mv "$output_dir/.override_qc_gate" "$output_dir/.override_qc_gate.applied" 2>/dev/null || true
     fi
 
     if [ $stage1_approved -eq 1 ]; then
@@ -306,9 +316,19 @@ analyze_sample() {
     stage2_approved=0
     if is_stage2_approved; then
         stage2_approved=1
-    elif [ -f "$output_dir/.override_align_gate" ]; then
+    elif [ -f "$output_dir/.override_align_gate" ] && [ -s "$output_dir/sorted/sorted.bam" ] && [ -s "$output_dir/aligned/alignment_flagstat.txt" ]; then
+        # Run the gate so it records TIER_3_OPERATOR_OVERRIDDEN, audits the decision, and archives the marker;
+        # otherwise the reasoning stays HALT and a later restart re-aligns and re-halts.
+        echo "  ⚠️  [SUPERVISOR] Operator Override active with existing sorted BAM. Applying override via Stage 2 gate..."
+        set +e
+        node "$SCRIPT_DIR/scripts/stage2_align_gate.js" "$output_dir" "$sample_name"
+        S2_OVERRIDE_EXIT=$?
+        set -e
+        if [ $S2_OVERRIDE_EXIT -ne 0 ]; then
+            echo "❌ [SUPERVISOR] Stage 2 gate failed to apply override (code $S2_OVERRIDE_EXIT)"
+            exit $S2_OVERRIDE_EXIT
+        fi
         stage2_approved=1
-        mv "$output_dir/.override_align_gate" "$output_dir/.override_align_gate.applied" 2>/dev/null || true
     fi
 
     if [ $stage2_approved -eq 1 ]; then
@@ -514,7 +534,7 @@ analyze_sample() {
         echo "  ⚠️  [SUPERVISOR] Operator Override active with existing BQSR output."
         echo "  Executing gate evaluation to apply override and resuming straight to Variant Calling..."
         set +e
-        node "$SCRIPT_DIR/scripts/stage4_bqsr_gate.js" "$output_dir" "$sample_name"
+        node "$SCRIPT_DIR/scripts/stage4_bqsr_gate.js" "$output_dir" "$sample_name" "$REFERENCE"
         BQSR_EXIT=$?
         set -e
         if [ $BQSR_EXIT -eq 0 ]; then
@@ -536,6 +556,7 @@ analyze_sample() {
     else
         step 7 "Base Quality Score Recalibration"
         mkdir -p "$output_dir/bqsr"
+        rm -f "$output_dir/bqsr/post_recal_data.table"
         echo "$REF_BUILD" > "$output_dir/bqsr/ref_build.txt"
         KNOWN_SITES_FILE="$output_dir/bqsr/known_sites.txt"
         > "$KNOWN_SITES_FILE"
@@ -581,6 +602,27 @@ analyze_sample() {
 
             BQSR_INPUT=$output_dir/bqsr/recal.bam
             echo "✅ Base quality recalibration applied"
+
+            # Conditional two-pass (qc.json post_recal_residual_error): when pre-recal drift exceeds the clinical
+            # threshold, re-run BaseRecalibrator on recal.bam to measure the residual miscalibration BQSR left behind.
+            NEEDS_SECOND_PASS=$(node -e '
+                try {
+                    const fs = require("fs");
+                    const e = require(process.argv[1]);
+                    const q = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+                    const m = e.parseRecalTable(fs.readFileSync(process.argv[3], "utf8"));
+                    const limit = q?.tiers?.tier_bqsr_recalibration_qc?.mean_quality_drift?.clinical_grade ?? 4.0;
+                    console.log(m.meanQualityDrift > limit ? 1 : 0);
+                } catch (err) { console.log(1); }
+            ' "$SCRIPT_DIR/../../../lib/exome/bqsr-triage-engine.js" "$SCRIPT_DIR/../../../qc.json" "$output_dir/bqsr/recal_data.table" 2>/dev/null || echo 1)
+            if [ "$NEEDS_SECOND_PASS" = "1" ]; then
+                echo "  [EXECUTION AGENT] Pre-recal drift above clinical threshold — running second BaseRecalibrator pass on recal.bam to measure residual error..."
+                $GATK BaseRecalibrator \
+                    -I $output_dir/bqsr/recal.bam \
+                    -R $REFERENCE \
+                    $KS_ARGS \
+                    -O $output_dir/bqsr/post_recal_data.table
+            fi
         else
             echo "⚠️  Known-sites (dbSNP/Mills) not found in reference/known-sites/ — BYPASSING BQSR; using dedup.bam."
             echo "    Install known-sites VCFs to enable full Base Quality Score Recalibration."
@@ -591,7 +633,7 @@ analyze_sample() {
         # Stage 4: BQSR Cognitive Supervisor Gate
         echo "  [SUPERVISOR] Evaluating Stage 4 BQSR metrics against clinical policies (qc.json)..."
         set +e
-        node "$SCRIPT_DIR/scripts/stage4_bqsr_gate.js" "$output_dir" "$sample_name"
+        node "$SCRIPT_DIR/scripts/stage4_bqsr_gate.js" "$output_dir" "$sample_name" "$REFERENCE"
         BQSR_EXIT=$?
         set -e
 

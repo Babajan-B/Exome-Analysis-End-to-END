@@ -20,6 +20,7 @@ process.on("uncaughtException", (err) => {
 
 const outputDir = process.argv[2];
 const sampleName = process.argv[3] || "sample";
+const referencePathArg = process.argv[4] || process.env.REFERENCE || null;
 
 if (!outputDir) {
   console.error("Usage: node stage4_bqsr_gate.js <output_dir> [sample_name]");
@@ -112,23 +113,146 @@ if (fs.existsSync(refBuildFile)) {
   } catch {}
 }
 
-// 8. Verify Contig Format Parity from alignment_idxstats.txt
+// 8. Verify Contig Format Parity (Bidirectional: BAM alignment_idxstats.txt vs Reference Genome)
 let contigParity = {
   namingConvention: "unknown",
   hasChrPrefix: false,
   verified: false,
+  bam: {
+    convention: "unknown",
+    hasChrPrefix: false,
+    sampleContigs: [],
+  },
+  reference: {
+    convention: "unknown",
+    hasChrPrefix: false,
+    source: null,
+    sampleContigs: [],
+  },
+  parityStatus: "UNVERIFIED",
+  isParityMatch: true,
 };
+
+// Side 1: Inspect BAM contigs from alignment_idxstats.txt
 const idxstatsPath = path.join(outputDir, "aligned", "alignment_idxstats.txt");
 if (fs.existsSync(idxstatsPath)) {
   try {
     const idxContent = fs.readFileSync(idxstatsPath, "utf8");
-    const firstContig = idxContent.split(/\r?\n/)[0]?.split(/\s+/)[0] || "";
-    if (firstContig.startsWith("chr")) {
-      contigParity = { namingConvention: "chr_prefixed", hasChrPrefix: true, verified: true };
-    } else if (/^[0-9XYM]/.test(firstContig)) {
-      contigParity = { namingConvention: "bare_numeric", hasChrPrefix: false, verified: true };
+    const rawContigs = idxContent
+      .split(/\r?\n/)
+      .map((line) => line.split(/\s+/)[0])
+      .filter((c) => c && c !== "*");
+    if (rawContigs.length > 0) {
+      contigParity.bam.sampleContigs = rawContigs.slice(0, 5);
+      const hasChr = rawContigs.some((c) => c.startsWith("chr"));
+      contigParity.bam.hasChrPrefix = hasChr;
+      contigParity.bam.convention = hasChr ? "chr_prefixed" : "bare_numeric";
+      // Backwards-compatible top-level keys
+      contigParity.namingConvention = contigParity.bam.convention;
+      contigParity.hasChrPrefix = hasChr;
+      contigParity.verified = true;
     }
   } catch {}
+}
+
+// Side 2: Inspect Reference Genome contigs (.dict / .fai / FASTA)
+function extractContigsFromFile(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.size === 0) return null;
+    const content = fs.readFileSync(filePath, "utf8");
+    if (filePath.endsWith(".dict")) {
+      const matches = [];
+      const regex = /@SQ\s+SN:([^\s\t]+)/g;
+      let m;
+      while ((m = regex.exec(content)) !== null) {
+        matches.push(m[1]);
+        if (matches.length >= 10) break;
+      }
+      return matches.length > 0 ? matches : null;
+    } else if (filePath.endsWith(".fai")) {
+      const lines = content.split(/\r?\n/).filter(Boolean);
+      const names = lines.map((l) => l.split(/\t/)[0]).filter((n) => n && n !== "*");
+      return names.length > 0 ? names.slice(0, 10) : null;
+    } else if (filePath.endsWith(".fa") || filePath.endsWith(".fasta")) {
+      const matches = [];
+      const regex = /^>([^\s\r\n]+)/gm;
+      let m;
+      while ((m = regex.exec(content)) !== null) {
+        matches.push(m[1]);
+        if (matches.length >= 10) break;
+      }
+      return matches.length > 0 ? matches : null;
+    }
+  } catch {}
+  return null;
+}
+
+let refContigs = [];
+let refSource = null;
+
+if (referencePathArg) {
+  const dictCand = referencePathArg.replace(/\.(fa|fasta)$/, ".dict");
+  const faiCand = referencePathArg + ".fai";
+  const faiCand2 = referencePathArg.replace(/\.(fa|fasta)$/, ".fai");
+
+  for (const cand of [dictCand, faiCand, faiCand2, referencePathArg]) {
+    const extracted = extractContigsFromFile(cand);
+    if (extracted && extracted.length > 0) {
+      refContigs = extracted;
+      refSource = cand;
+      break;
+    }
+  }
+}
+
+if (refContigs.length === 0) {
+  const candidateRefDirs = [
+    path.join(outputDir, "reference"),
+    path.resolve(outputDir, "..", "reference"),
+    path.resolve(outputDir, "../..", "reference"),
+    path.resolve(__dirname, "../reference"),
+    path.resolve(__dirname, "../../reference"),
+  ];
+  for (const dir of candidateRefDirs) {
+    if (!fs.existsSync(dir)) continue;
+    try {
+      const files = fs.readdirSync(dir);
+      const dictFile = files.find((f) => f.endsWith(".dict"));
+      const faiFile = files.find((f) => f.endsWith(".fai"));
+      const faFile = files.find((f) => f.endsWith(".fa") || f.endsWith(".fasta"));
+      const best = dictFile || faiFile || faFile;
+      if (best) {
+        const fullPath = path.join(dir, best);
+        const extracted = extractContigsFromFile(fullPath);
+        if (extracted && extracted.length > 0) {
+          refContigs = extracted;
+          refSource = fullPath;
+          break;
+        }
+      }
+    } catch {}
+  }
+}
+
+if (refContigs.length > 0) {
+  contigParity.reference.sampleContigs = refContigs.slice(0, 5);
+  contigParity.reference.source = refSource;
+  const refHasChr = refContigs.some((c) => c.startsWith("chr"));
+  contigParity.reference.hasChrPrefix = refHasChr;
+  contigParity.reference.convention = refHasChr ? "chr_prefixed" : "bare_numeric";
+
+  if (contigParity.bam.convention !== "unknown") {
+    const match = contigParity.bam.hasChrPrefix === refHasChr;
+    contigParity.isParityMatch = match;
+    contigParity.parityStatus = match ? "PARITY_CONFIRMED" : "MISMATCH_DETECTED";
+  } else {
+    contigParity.parityStatus = "REFERENCE_ONLY_VERIFIED";
+  }
+} else {
+  contigParity.parityStatus = contigParity.bam.convention !== "unknown" ? "BAM_ONLY_VERIFIED" : "UNVERIFIED";
+  contigParity.isParityMatch = true;
 }
 
 let parsedMetrics = {
@@ -212,7 +336,25 @@ const triage = bqsrTriageEngine.evaluateBqsrTriage(parsedMetrics, {
   hasOverride,
   isBypassed,
   qcPolicy,
+  postRecalResidualDrift: postRecalData ? postRecalData.meanResidualDrift : null,
 });
+
+// Enforce Contig Format Parity if mismatch detected between BAM and Reference Genome
+const enforceContigParity = qcPolicy?.tiers?.tier_bqsr_recalibration_qc?.contig_format_parity?.enforce_chr_prefix_match !== false;
+if (enforceContigParity && !contigParity.isParityMatch && !hasOverride) {
+  triage.exitCode = 1;
+  triage.tier = "TIER_3_BQSR_HALT";
+  if (triage.classification) {
+    triage.classification.contigParity = "MISMATCH_DETECTED";
+  }
+  triage.operatorExplanation = {
+    rootCause: "CONTIG_FORMAT_PARITY_MISMATCH",
+    details: `Contig naming convention mismatch between BAM (${contigParity.bam.convention}: ${contigParity.bam.sampleContigs.join(", ")}) and Reference Genome (${contigParity.reference.convention}: ${contigParity.reference.sampleContigs.join(", ")}).`,
+    sequencerPhysics: "GATK requires exact string parity between BAM sequence headers and reference genome FASTA dictionary. Mismatched contig prefixes (e.g. 'chr1' vs '1') cause silent masking failure of known polymorphic sites or fatal coordinate misalignment.",
+    suggestedAction: "Re-header BAM to match reference dictionary or re-align to matching reference build.",
+  };
+  triage.supervisorThought = `🛑 [Supervisor Cognitive Halt] Sample ${sampleName} failed Contig Format Parity: BAM uses ${contigParity.bam.convention} while Reference uses ${contigParity.reference.convention}.`;
+}
 
 // 11. Write stage4_bqsr_reasoning.json
 const reasoningPayload = {
@@ -231,7 +373,9 @@ const reasoningPayload = {
     readGroupsCount: parsedMetrics.readGroups.length,
     knownSites: parsedMetrics.knownSites,
     isBypassed,
+    floorSwitch: triage.floorSwitch,
   },
+  floorSwitch: triage.floorSwitch,
   readGroups: parsedMetrics.readGroups,
   qualityMapping: parsedMetrics.qualityMapping.slice(0, 30), // top calibration bins
   contigParity,
