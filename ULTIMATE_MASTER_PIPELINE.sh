@@ -143,8 +143,31 @@ analyze_sample() {
     # ═══════════════════════════════════════════════════════════════
     
     # ── Cascading Checkpoint Evaluators ──
+    # Checks if Stage 5 (Variant Calling & Quality Filtering) is already approved
+    is_stage5_approved() {
+        local has_vcf=0
+        if [ -s "$output_dir/filtered/filtered_variants.vcf" ] || [ -s "$output_dir/filtered/filtered_PASS_only.vcf" ]; then
+            has_vcf=1
+        fi
+        if [ $has_vcf -eq 1 ]; then
+            local s5_file="$output_dir/qc/stage5_variant_reasoning.json"
+            [ ! -f "$s5_file" ] && s5_file="$output_dir/stage5_variant_reasoning.json"
+            if [ -f "$s5_file" ]; then
+                local s5_tier
+                s5_tier=$(grep '"tier":' "$s5_file" 2>/dev/null || echo "")
+                if [[ "$s5_tier" == *"TIER_1"* || "$s5_tier" == *"RESEARCH"* || "$s5_tier" == *"OVERRID"* ]]; then
+                    return 0
+                fi
+            fi
+        fi
+        return 1
+    }
+
     # Checks if Stage 4 (BQSR) is already approved (either recal.bam or dedup.bam if bypassed)
     is_stage4_approved() {
+        if is_stage5_approved; then
+            return 0
+        fi
         local has_recal=0
         if [ -s "$output_dir/bqsr/recal.bam" ] && [ -s "$output_dir/bqsr/recal_data.table" ]; then
             if [ -f "$output_dir/bqsr/recal.bam.bai" ] || [ -f "$output_dir/bqsr/recal.bai" ]; then
@@ -165,7 +188,7 @@ analyze_sample() {
 
     # Checks if Stage 3 (Deduplication) is already approved
     is_stage3_approved() {
-        if is_stage4_approved; then
+        if is_stage4_approved || is_stage5_approved; then
             return 0
         fi
         local has_dedup=0
@@ -186,7 +209,7 @@ analyze_sample() {
 
     # Checks if Stage 2 (Alignment) is already approved
     is_stage2_approved() {
-        if is_stage3_approved || is_stage4_approved; then
+        if is_stage3_approved || is_stage4_approved || is_stage5_approved; then
             return 0
         fi
         local has_alignment_bam=0
@@ -207,7 +230,7 @@ analyze_sample() {
 
     # Checks if Stage 1 (QC & Trimming) is already approved
     is_stage1_approved() {
-        if is_stage2_approved || is_stage3_approved || is_stage4_approved; then
+        if is_stage2_approved || is_stage3_approved || is_stage4_approved || is_stage5_approved; then
             return 0
         fi
         if [ -s "$output_dir/trimmed/r1_trimmed.fastq.gz" ] && [ -s "$output_dir/trimmed/fastp_report.json" ]; then
@@ -679,36 +702,117 @@ analyze_sample() {
         fi
     fi
     
-    # 7. Variant Calling
-    step 8 "Variant Calling"
-    $GATK HaplotypeCaller \
-        -R $REFERENCE \
-        -I $BQSR_INPUT \
-        -O $output_dir/variants/raw_variants.vcf \
-        --native-pair-hmm-threads $threads
-    
-    RAW_COUNT=$(grep -v "^#" $output_dir/variants/raw_variants.vcf | wc -l)
-    echo "✅ Called $RAW_COUNT variants"
-    
-    # 8. Filtering
-    step 9 "Variant Filtering"
-    $GATK VariantFiltration \
-        -R $REFERENCE \
-        -V $output_dir/variants/raw_variants.vcf \
-        -O $output_dir/filtered/filtered_variants.vcf \
-        --filter-expression "QD < 2.0" --filter-name "QD2" \
-        --filter-expression "QUAL < 30.0" --filter-name "QUAL30" \
-        --filter-expression "MQ < 40.0" --filter-name "MQ40" \
-        --filter-expression "FS > 60.0" --filter-name "FS60" \
-        --filter-expression "SOR > 3.0" --filter-name "SOR3"
-    
-    PASS_COUNT=$(grep -v "^#" $output_dir/filtered/filtered_variants.vcf | grep -w "PASS" | wc -l)
-    echo "✅ $PASS_COUNT variants passed filters"
-    
-    # Create PASS-only VCF
-    PASS_VCF=$output_dir/filtered/filtered_PASS_only.vcf
-    grep "^#" $output_dir/filtered/filtered_variants.vcf > $PASS_VCF
-    grep -v "^#" $output_dir/filtered/filtered_variants.vcf | grep -w "PASS" >> $PASS_VCF
+    # ── Checkpoint: Stage 5 (Variant Calling & Quality Filtering) ──
+    stage5_approved=0
+    if is_stage5_approved; then
+        stage5_approved=1
+    elif [ -f "$output_dir/.override_variant_gate" ] && [ -s "$output_dir/filtered/filtered_variants.vcf" -o -s "$output_dir/variants/raw_variants.vcf" ]; then
+        echo "  ⚠️  [SUPERVISOR] Operator Override active with existing VCF. Applying override via Stage 5 gate..."
+        set +e
+        node "$SCRIPT_DIR/scripts/stage5_variant_gate.js" "$output_dir" "$sample_name" "$REFERENCE"
+        S5_OVERRIDE_EXIT=$?
+        set -e
+        if [ $S5_OVERRIDE_EXIT -ne 0 ]; then
+            echo "❌ [SUPERVISOR] Stage 5 gate failed to apply override (code $S5_OVERRIDE_EXIT)"
+            exit $S5_OVERRIDE_EXIT
+        fi
+        stage5_approved=1
+    fi
+
+    if [ $stage5_approved -eq 1 ]; then
+        echo "⏩ [CHECKPOINT] Stage 5 (Variant Calling & Quality Filtering) already completed and approved. Skipping to Variant Annotation..."
+        PASS_VCF=$output_dir/filtered/filtered_PASS_only.vcf
+        if [ ! -s "$PASS_VCF" ]; then
+            PASS_VCF=$output_dir/filtered/filtered_variants.vcf
+        fi
+    else
+        # 7. Variant Calling
+        step 8 "Variant Calling"
+        mkdir -p $output_dir/variants $output_dir/filtered
+
+        HC_EXTRA_ARGS=""
+        if [ -f "$output_dir/stage4_bqsr_reasoning.json" -o -f "$output_dir/qc/stage4_bqsr_reasoning.json" ]; then
+            S4_FILE="$output_dir/stage4_bqsr_reasoning.json"
+            [ ! -f "$S4_FILE" ] && S4_FILE="$output_dir/qc/stage4_bqsr_reasoning.json"
+            HC_EXTRA_ARGS=$(node -e '
+                try {
+                    const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+                    const args = [];
+                    if (d.downstreamDirectives?.minPruning) args.push("--min-pruning " + d.downstreamDirectives.minPruning);
+                    if (d.downstreamDirectives?.pcrIndelModel) args.push("--pcr-indel-model " + d.downstreamDirectives.pcrIndelModel);
+                    console.log(args.join(" "));
+                } catch(e) {}
+            ' "$S4_FILE" 2>/dev/null)
+        fi
+
+        echo "  [EXECUTION AGENT] Running GATK HaplotypeCaller on recalibrated BAM..."
+        $GATK HaplotypeCaller \
+            -R $REFERENCE \
+            -I $BQSR_INPUT \
+            -O $output_dir/variants/raw_variants.vcf \
+            --native-pair-hmm-threads $threads \
+            --stand-call-conf 30.0 \
+            $HC_EXTRA_ARGS
+
+        RAW_COUNT=$(grep -v "^#" $output_dir/variants/raw_variants.vcf | wc -l | tr -d ' ')
+        echo "✅ Called $RAW_COUNT raw variants"
+
+        # 8. Filtering
+        step 9 "Variant Filtering"
+        echo "  [EXECUTION AGENT] Running GATK VariantFiltration (Broad Best Practices SNV & Indel Hard Filters)..."
+        $GATK VariantFiltration \
+            -R $REFERENCE \
+            -V $output_dir/variants/raw_variants.vcf \
+            -O $output_dir/filtered/filtered_variants.vcf \
+            --filter-expression "vc.isSNP() && QD < 2.0" --filter-name "LowQD_SNP" \
+            --filter-expression "vc.isSNP() && QUAL < 30.0" --filter-name "LowQUAL_SNP" \
+            --filter-expression "vc.isSNP() && FS > 60.0" --filter-name "StrandBiasFS_SNP" \
+            --filter-expression "vc.isSNP() && SOR > 3.0" --filter-name "HighSOR_SNP" \
+            --filter-expression "vc.isSNP() && MQ < 40.0" --filter-name "LowMQ_SNP" \
+            --filter-expression "vc.isSNP() && MQRankSum < -12.5" --filter-name "LowMQRankSum_SNP" \
+            --filter-expression "vc.isSNP() && ReadPosRankSum < -8.0" --filter-name "ReadPosBias_SNP" \
+            --filter-expression "!vc.isSNP() && QD < 2.0" --filter-name "LowQD_INDEL" \
+            --filter-expression "!vc.isSNP() && QUAL < 30.0" --filter-name "LowQUAL_INDEL" \
+            --filter-expression "!vc.isSNP() && FS > 200.0" --filter-name "StrandBiasFS_INDEL" \
+            --filter-expression "!vc.isSNP() && SOR > 10.0" --filter-name "HighSOR_INDEL" \
+            --filter-expression "!vc.isSNP() && ReadPosRankSum < -20.0" --filter-name "ReadPosBias_INDEL"
+
+        # Create PASS-only VCF
+        PASS_VCF=$output_dir/filtered/filtered_PASS_only.vcf
+        grep "^#" $output_dir/filtered/filtered_variants.vcf > $PASS_VCF
+        grep -v "^#" $output_dir/filtered/filtered_variants.vcf | grep -w "PASS" >> $PASS_VCF
+
+        PASS_COUNT=$(grep -v "^#" $PASS_VCF | wc -l | tr -d ' ')
+        echo "✅ Filtered variants: $PASS_COUNT / $RAW_COUNT passed filters"
+
+        # Stage 5 Cognitive Supervisor Gate
+        echo "  [SUPERVISOR] Evaluating Stage 5 Variant Calling & Biology metrics against clinical policies (qc.json)..."
+        set +e
+        node "$SCRIPT_DIR/scripts/stage5_variant_gate.js" "$output_dir" "$sample_name" "$REFERENCE"
+        S5_EXIT=$?
+        set -e
+
+        if [ $S5_EXIT -ne 0 ]; then
+            if [ $S5_EXIT -eq 1 ]; then
+                echo ""
+                echo "🛑 [PIPELINE HALTED] Stage 5 Variant Callset Gate failed biological rejection floor."
+                echo "   Human-in-the-Loop Operator Opinion Gate is required."
+                echo "   Use the Web Dashboard to either:"
+                echo "     1. [Abort Pipeline] (Recommended clinical action)"
+                echo "     2. [Override & Force Run] (Research Mode with mandatory flagging)"
+                echo "   Or run: touch \"$output_dir/.override_variant_gate\" and restart pipeline."
+                exit 1
+            elif [ $S5_EXIT -eq 2 ]; then
+                echo "❌ [TOOL CRASH] Variant calling output missing or corrupted. Pipeline halted."
+                exit 2
+            else
+                echo "❌ [ERROR] Unknown Stage 5 gate error ($S5_EXIT)."
+                exit 1
+            fi
+        fi
+
+        echo "✅ Stage 5 Variant Calling & Callset Biology Approved by Supervisor. Proceeding to Annotation."
+    fi
     
     # 9. ANNOVAR Annotation
     step 10 "ANNOVAR Annotation"
@@ -1058,8 +1162,8 @@ EOF
     if [ -d "$RESULT_DIR" ]; then
         # Variant counts
         if [ -f "$RESULT_DIR/filtered/filtered_variants.vcf" ]; then
-            RAW=$(grep -v "^#" "$RESULT_DIR/variants/raw_variants.vcf" 2>/dev/null | wc -l)
-            PASS=$(grep -v "^#" "$RESULT_DIR/filtered/filtered_variants.vcf" | grep -w "PASS" | wc -l)
+            RAW=$([ -f "$RESULT_DIR/variants/raw_variants.vcf" ] && (grep -v "^#" "$RESULT_DIR/variants/raw_variants.vcf" 2>/dev/null || true) | wc -l | tr -d ' ' || echo 0)
+            PASS=$((grep -v "^#" "$RESULT_DIR/filtered/filtered_variants.vcf" 2>/dev/null | grep -w "PASS" 2>/dev/null || true) | wc -l | tr -d ' ')
             
             cat >> $SUMMARY_FILE << EOF
   Raw variants called:     $RAW
@@ -1070,7 +1174,7 @@ EOF
         # Annotation
         ANNOT_FILE=$(find "$RESULT_DIR/annovar" -name "*.hg19_multianno.txt" 2>/dev/null | head -1 || true)
         if [ -f "$ANNOT_FILE" ]; then
-            PATHOGENIC=$(grep -i "pathogenic" "$ANNOT_FILE" 2>/dev/null | wc -l)
+            PATHOGENIC=$((grep -i "pathogenic" "$ANNOT_FILE" 2>/dev/null || true) | wc -l | tr -d ' ')
             cat >> $SUMMARY_FILE << EOF
   Annotated (ANNOVAR):     Yes
   Pathogenic variants:     $PATHOGENIC
@@ -1176,7 +1280,7 @@ zip -r $ZIP_NAME \
     results/*/trimmed/fastp_report.html \
     MASTER_ANALYSIS_SUMMARY.txt \
     -x "*.bam" "*.sam" "*.fastq.gz" "*.avinput" "*_dropped" "*_filtered" "raw_variants.vcf" "filtered_variants.vcf" "filtered_PASS_only.vcf" \
-    2>/dev/null
+    2>/dev/null || true
 
 ZIP_SIZE=$(du -sh "$ZIP_NAME" 2>/dev/null | cut -f1 || echo "N/A")
 [ -z "$ZIP_SIZE" ] && ZIP_SIZE="N/A"
