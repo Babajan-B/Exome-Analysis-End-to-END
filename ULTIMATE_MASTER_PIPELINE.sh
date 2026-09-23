@@ -142,19 +142,93 @@ analyze_sample() {
     # PART 1: CORE PIPELINE
     # ═══════════════════════════════════════════════════════════════
     
-    # ── Checkpoint: Stage 1 (QC & Trimming) ──
-    stage1_approved=0
-    if [ -s "$output_dir/trimmed/r1_trimmed.fastq.gz" ] && [ -s "$output_dir/trimmed/fastp_report.json" ]; then
-        if [ -f "$output_dir/.override_qc_gate" ]; then
-            stage1_approved=1
-            mv "$output_dir/.override_qc_gate" "$output_dir/.override_qc_gate.applied" 2>/dev/null || true
-        elif [ -f "$output_dir/supervisor_reasoning.json" ]; then
-            s1_tier=$(grep '"tier":' "$output_dir/supervisor_reasoning.json" 2>/dev/null || echo "")
-            # Explicit allowlist of approved tiers: TIER_1 (direct alignment), RESEARCH (qualified post-trim), or OVERRIDDEN
-            if [[ "$s1_tier" == *"TIER_1"* || "$s1_tier" == *"RESEARCH"* || "$s1_tier" == *"OVERRID"* ]]; then
-                stage1_approved=1
+    # ── Cascading Checkpoint Evaluators ──
+    # Checks if Stage 4 (BQSR) is already approved (either recal.bam or dedup.bam if bypassed)
+    is_stage4_approved() {
+        local has_recal=0
+        if [ -s "$output_dir/bqsr/recal.bam" ] && [ -s "$output_dir/bqsr/recal_data.table" ]; then
+            if [ -f "$output_dir/bqsr/recal.bam.bai" ] || [ -f "$output_dir/bqsr/recal.bai" ]; then
+                has_recal=1
+            fi
+        elif [ -f "$output_dir/.bqsr_bypassed" ] && [ -s "$output_dir/dedup/dedup.bam" ]; then
+            has_recal=1
+        fi
+        if [ $has_recal -eq 1 ] && [ -f "$output_dir/stage4_bqsr_reasoning.json" ]; then
+            local s4_tier
+            s4_tier=$(grep '"tier":' "$output_dir/stage4_bqsr_reasoning.json" 2>/dev/null || echo "")
+            if [[ "$s4_tier" == *"TIER_1"* || "$s4_tier" == *"RESEARCH"* || "$s4_tier" == *"OVERRID"* ]]; then
+                return 0
             fi
         fi
+        return 1
+    }
+
+    # Checks if Stage 3 (Deduplication) is already approved
+    is_stage3_approved() {
+        if is_stage4_approved; then
+            return 0
+        fi
+        local has_dedup=0
+        if [ -s "$output_dir/dedup/dedup.bam" ] && [ -s "$output_dir/dedup/metrics.txt" ]; then
+            if [ -f "$output_dir/dedup/dedup.bam.bai" ] || [ -f "$output_dir/dedup/dedup.bai" ]; then
+                has_dedup=1
+            fi
+        fi
+        if [ $has_dedup -eq 1 ] && [ -f "$output_dir/stage3_dedup_reasoning.json" ]; then
+            local s3_tier
+            s3_tier=$(grep '"tier":' "$output_dir/stage3_dedup_reasoning.json" 2>/dev/null || echo "")
+            if [[ "$s3_tier" == *"TIER_1"* || "$s3_tier" == *"RESEARCH"* || "$s3_tier" == *"OVERRID"* ]]; then
+                return 0
+            fi
+        fi
+        return 1
+    }
+
+    # Checks if Stage 2 (Alignment) is already approved
+    is_stage2_approved() {
+        if is_stage3_approved || is_stage4_approved; then
+            return 0
+        fi
+        local has_alignment_bam=0
+        if [ -s "$output_dir/sorted/sorted.bam" ] || [ -s "$output_dir/dedup/dedup.bam" ] || [ -s "$output_dir/bqsr/recal.bam" ]; then
+            has_alignment_bam=1
+        fi
+        if [ $has_alignment_bam -eq 1 ] && [ -s "$output_dir/aligned/alignment_flagstat.txt" ]; then
+            if [ -f "$output_dir/stage2_alignment_reasoning.json" ]; then
+                local s2_tier
+                s2_tier=$(grep '"tier":' "$output_dir/stage2_alignment_reasoning.json" 2>/dev/null || echo "")
+                if [[ "$s2_tier" == *"TIER_1"* || "$s2_tier" == *"RESEARCH"* || "$s2_tier" == *"OVERRID"* ]]; then
+                    return 0
+                fi
+            fi
+        fi
+        return 1
+    }
+
+    # Checks if Stage 1 (QC & Trimming) is already approved
+    is_stage1_approved() {
+        if is_stage2_approved || is_stage3_approved || is_stage4_approved; then
+            return 0
+        fi
+        if [ -s "$output_dir/trimmed/r1_trimmed.fastq.gz" ] && [ -s "$output_dir/trimmed/fastp_report.json" ]; then
+            if [ -f "$output_dir/supervisor_reasoning.json" ]; then
+                local s1_tier
+                s1_tier=$(grep '"tier":' "$output_dir/supervisor_reasoning.json" 2>/dev/null || echo "")
+                if [[ "$s1_tier" == *"TIER_1"* || "$s1_tier" == *"RESEARCH"* || "$s1_tier" == *"OVERRID"* ]]; then
+                    return 0
+                fi
+            fi
+        fi
+        return 1
+    }
+
+    # ── Checkpoint: Stage 1 (QC & Trimming) ──
+    stage1_approved=0
+    if is_stage1_approved; then
+        stage1_approved=1
+    elif [ -f "$output_dir/.override_qc_gate" ]; then
+        stage1_approved=1
+        mv "$output_dir/.override_qc_gate" "$output_dir/.override_qc_gate.applied" 2>/dev/null || true
     fi
 
     if [ $stage1_approved -eq 1 ]; then
@@ -230,22 +304,11 @@ analyze_sample() {
     
     # ── Checkpoint: Stage 2 (Alignment & Coordinate Sorting) ──
     stage2_approved=0
-    has_alignment_bam=0
-    if [ -s "$output_dir/sorted/sorted.bam" ] || [ -s "$output_dir/dedup/dedup.bam" ]; then
-        has_alignment_bam=1
-    fi
-
-    if [ $has_alignment_bam -eq 1 ] && [ -s "$output_dir/aligned/alignment_flagstat.txt" ]; then
-        if [ -f "$output_dir/.override_align_gate" ]; then
-            stage2_approved=1
-            mv "$output_dir/.override_align_gate" "$output_dir/.override_align_gate.applied" 2>/dev/null || true
-        elif [ -f "$output_dir/stage2_alignment_reasoning.json" ]; then
-            s2_tier=$(grep '"tier":' "$output_dir/stage2_alignment_reasoning.json" 2>/dev/null || echo "")
-            # Explicit allowlist of approved tiers: TIER_1 (clinical alignment), RESEARCH, or OVERRIDDEN
-            if [[ "$s2_tier" == *"TIER_1"* || "$s2_tier" == *"RESEARCH"* || "$s2_tier" == *"OVERRID"* ]]; then
-                stage2_approved=1
-            fi
-        fi
+    if is_stage2_approved; then
+        stage2_approved=1
+    elif [ -f "$output_dir/.override_align_gate" ]; then
+        stage2_approved=1
+        mv "$output_dir/.override_align_gate" "$output_dir/.override_align_gate.applied" 2>/dev/null || true
     fi
 
     if [ $stage2_approved -eq 1 ]; then
@@ -324,34 +387,21 @@ analyze_sample() {
     
     # ── Checkpoint: Stage 3 (Deduplication) ──
     stage3_approved=0
-    has_dedup_bam=0
-    if [ -s "$output_dir/dedup/dedup.bam" ] && [ -s "$output_dir/dedup/metrics.txt" ]; then
-        if [ -f "$output_dir/dedup/dedup.bam.bai" ] || [ -f "$output_dir/dedup/dedup.bai" ]; then
-            has_dedup_bam=1
-        fi
-    fi
-
-    if [ $has_dedup_bam -eq 1 ]; then
-        if [ -f "$output_dir/.override_dedup_gate" ]; then
-            echo "  ⚠️  [SUPERVISOR] Operator Override active with existing deduplicated BAM."
-            echo "  Executing gate evaluation to apply override and resuming straight to BQSR..."
-            set +e
-            node "$SCRIPT_DIR/scripts/stage3_dedup_gate.js" "$output_dir" "$sample_name"
-            DEDUP_EXIT=$?
-            set -e
-            if [ $DEDUP_EXIT -eq 0 ]; then
-                echo "✅ Stage 3 Deduplication Authorized via Operator Override. Proceeding directly to BQSR."
-                stage3_approved=1
-            else
-                echo "❌ [SUPERVISOR] Deduplication gate evaluation failed with code $DEDUP_EXIT"
-                exit $DEDUP_EXIT
-            fi
-        elif [ -f "$output_dir/stage3_dedup_reasoning.json" ]; then
-            s3_tier=$(grep '"tier":' "$output_dir/stage3_dedup_reasoning.json" 2>/dev/null || echo "")
-            # Explicit allowlist of approved tiers: TIER_1 (clinical dedup), RESEARCH, or OVERRIDDEN
-            if [[ "$s3_tier" == *"TIER_1"* || "$s3_tier" == *"RESEARCH"* || "$s3_tier" == *"OVERRID"* ]]; then
-                stage3_approved=1
-            fi
+    if is_stage3_approved; then
+        stage3_approved=1
+    elif [ -f "$output_dir/.override_dedup_gate" ] && [ -s "$output_dir/dedup/dedup.bam" ]; then
+        echo "  ⚠️  [SUPERVISOR] Operator Override active with existing deduplicated BAM."
+        echo "  Executing gate evaluation to apply override and resuming straight to BQSR..."
+        set +e
+        node "$SCRIPT_DIR/scripts/stage3_dedup_gate.js" "$output_dir" "$sample_name"
+        DEDUP_EXIT=$?
+        set -e
+        if [ $DEDUP_EXIT -eq 0 ]; then
+            echo "✅ Stage 3 Deduplication Authorized via Operator Override. Proceeding directly to BQSR."
+            stage3_approved=1
+        else
+            echo "❌ [SUPERVISOR] Deduplication gate evaluation failed with code $DEDUP_EXIT"
+            exit $DEDUP_EXIT
         fi
     fi
 
@@ -458,37 +508,21 @@ analyze_sample() {
     
     # ── Checkpoint: Stage 4 (Base Quality Score Recalibration) ──
     stage4_approved=0
-    has_bqsr_output=0
-    # Check if recal.bam exists and is indexed, OR if BQSR was bypassed under research protocol
-    if [ -s "$output_dir/bqsr/recal.bam" ] && [ -s "$output_dir/bqsr/recal_data.table" ]; then
-        if [ -f "$output_dir/bqsr/recal.bam.bai" ] || [ -f "$output_dir/bqsr/recal.bai" ]; then
-            has_bqsr_output=1
-        fi
-    elif [ -f "$output_dir/.bqsr_bypassed" ] && [ -s "$output_dir/dedup/dedup.bam" ]; then
-        has_bqsr_output=1
-    fi
-
-    if [ $has_bqsr_output -eq 1 ]; then
-        if [ -f "$output_dir/.override_bqsr_gate" ]; then
-            echo "  ⚠️  [SUPERVISOR] Operator Override active with existing BQSR output."
-            echo "  Executing gate evaluation to apply override and resuming straight to Variant Calling..."
-            set +e
-            node "$SCRIPT_DIR/scripts/stage4_bqsr_gate.js" "$output_dir" "$sample_name"
-            BQSR_EXIT=$?
-            set -e
-            if [ $BQSR_EXIT -eq 0 ]; then
-                echo "✅ Stage 4 BQSR Authorized via Operator Override. Proceeding directly to Variant Calling."
-                stage4_approved=1
-            else
-                echo "❌ [SUPERVISOR] BQSR gate evaluation failed with code $BQSR_EXIT"
-                exit $BQSR_EXIT
-            fi
-        elif [ -f "$output_dir/stage4_bqsr_reasoning.json" ]; then
-            s4_tier=$(grep '"tier":' "$output_dir/stage4_bqsr_reasoning.json" 2>/dev/null || echo "")
-            # Explicit allowlist of approved tiers: TIER_1 (clinical BQSR), RESEARCH, or OVERRIDDEN
-            if [[ "$s4_tier" == *"TIER_1"* || "$s4_tier" == *"RESEARCH"* || "$s4_tier" == *"OVERRID"* ]]; then
-                stage4_approved=1
-            fi
+    if is_stage4_approved; then
+        stage4_approved=1
+    elif [ -f "$output_dir/.override_bqsr_gate" ]; then
+        echo "  ⚠️  [SUPERVISOR] Operator Override active with existing BQSR output."
+        echo "  Executing gate evaluation to apply override and resuming straight to Variant Calling..."
+        set +e
+        node "$SCRIPT_DIR/scripts/stage4_bqsr_gate.js" "$output_dir" "$sample_name"
+        BQSR_EXIT=$?
+        set -e
+        if [ $BQSR_EXIT -eq 0 ]; then
+            echo "✅ Stage 4 BQSR Authorized via Operator Override. Proceeding directly to Variant Calling."
+            stage4_approved=1
+        else
+            echo "❌ [SUPERVISOR] BQSR gate evaluation failed with code $BQSR_EXIT"
+            exit $BQSR_EXIT
         fi
     fi
 
@@ -502,13 +536,23 @@ analyze_sample() {
     else
         step 7 "Base Quality Score Recalibration"
         mkdir -p "$output_dir/bqsr"
+        echo "$REF_BUILD" > "$output_dir/bqsr/ref_build.txt"
+        KNOWN_SITES_FILE="$output_dir/bqsr/known_sites.txt"
+        > "$KNOWN_SITES_FILE"
         BQSR_INPUT=$output_dir/dedup/dedup.bam
 
         if [ -f "$KNOWN_DBSNP" ]; then
             rm -f "$output_dir/.bqsr_bypassed"
+            echo "$KNOWN_DBSNP" >> "$KNOWN_SITES_FILE"
             KS_ARGS="--known-sites $KNOWN_DBSNP"
-            [ -f "$KNOWN_MILLS" ] && KS_ARGS="$KS_ARGS --known-sites $KNOWN_MILLS"
-            [ -f "$KNOWN_INDELS" ] && KS_ARGS="$KS_ARGS --known-sites $KNOWN_INDELS"
+            if [ -f "$KNOWN_MILLS" ]; then
+                echo "$KNOWN_MILLS" >> "$KNOWN_SITES_FILE"
+                KS_ARGS="$KS_ARGS --known-sites $KNOWN_MILLS"
+            fi
+            if [ -f "$KNOWN_INDELS" ]; then
+                echo "$KNOWN_INDELS" >> "$KNOWN_SITES_FILE"
+                KS_ARGS="$KS_ARGS --known-sites $KNOWN_INDELS"
+            fi
 
             echo "  [EXECUTION AGENT] Running GATK BaseRecalibrator with reference-matched known-sites..."
             $GATK BaseRecalibrator \
@@ -554,7 +598,7 @@ analyze_sample() {
         if [ $BQSR_EXIT -ne 0 ]; then
             if [ $BQSR_EXIT -eq 1 ]; then
                 echo ""
-                echo "🛑 [PIPELINE HALTED] BQSR Quality Gate failed rejection floor (Drift > 8.0 Phred or Observations < 50M)."
+                echo "🛑 [PIPELINE HALTED] BQSR Quality Gate failed rejection floor (Empirical Q < 15 or Observations < 50M)."
                 echo "   Human-in-the-Loop Operator Opinion Gate is required."
                 echo "   Use the Web Dashboard to either:"
                 echo "     1. [Abort Pipeline] (Recommended clinical action)"
@@ -569,6 +613,15 @@ analyze_sample() {
                 exit 1
             fi
         fi
+
+        # Assert active BAM agreement
+        EXPECTED_BQSR_INPUT="$output_dir/bqsr/recal.bam"
+        [ -f "$output_dir/.bqsr_bypassed" ] && EXPECTED_BQSR_INPUT="$output_dir/dedup/dedup.bam"
+        if [ "$BQSR_INPUT" != "$EXPECTED_BQSR_INPUT" ]; then
+            echo "  ℹ️  [ALIGNMENT AGREEMENT] Synchronizing calling BAM: $EXPECTED_BQSR_INPUT"
+            BQSR_INPUT="$EXPECTED_BQSR_INPUT"
+        fi
+
         echo "✅ Stage 4 BQSR Approved by Supervisor. Proceeding to Variant Calling."
     fi
 
