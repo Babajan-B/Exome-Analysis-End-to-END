@@ -122,6 +122,12 @@ analyze_sample() {
     # Create output directories
     mkdir -p $output_dir/{fastqc,trimmed,aligned,sorted,dedup,bqsr,variants,filtered,annovar/snpeff,annovar/functional_classification}
     
+    # State hygiene: purge stale halt and reasoning artifacts from previous runs
+    rm -f "$output_dir/supervisor_reasoning.json" \
+          "$output_dir/stage2_alignment_reasoning.json" \
+          "$output_dir/halt_report.json" \
+          "$output_dir"/*.applied
+    
     # Log file
     LOG=$output_dir/pipeline.log
     exec > >(tee -a $LOG) 2>&1
@@ -161,8 +167,10 @@ analyze_sample() {
     if [ -f "$output_dir/.override_qc_gate" ] && [ -f "$output_dir/trimmed/r1_trimmed.fastq.gz" ] && [ -f "$output_dir/trimmed/fastp_report.json" ]; then
         echo "  ⚠️  [SUPERVISOR] Operator Override active with existing trimmed FASTQs."
         echo "  Executing gate evaluation to apply override and resuming straight to Alignment..."
+        set +e
         node "$SCRIPT_DIR/scripts/stage1_qc_gate.js" "$output_dir" "$sample_name"
         gate_status=$?
+        set -e
         if [ "$gate_status" -eq 0 ]; then
             echo "✅ Stage 1 QC Authorized via Operator Override. Proceeding directly to Alignment."
         else
