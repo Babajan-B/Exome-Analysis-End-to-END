@@ -122,12 +122,8 @@ analyze_sample() {
     # Create output directories
     mkdir -p $output_dir/{fastqc,trimmed,aligned,sorted,dedup,bqsr,variants,filtered,annovar/snpeff,annovar/functional_classification}
     
-    # State hygiene: purge stale halt and reasoning artifacts from previous runs
-    rm -f "$output_dir/supervisor_reasoning.json" \
-          "$output_dir/stage2_alignment_reasoning.json" \
-          "$output_dir/stage3_dedup_reasoning.json" \
-          "$output_dir/halt_report.json" \
-          "$output_dir"/*.applied
+    # State hygiene: purge stale halt reports and dotfile override markers
+    rm -f "$output_dir/halt_report.json" "$output_dir"/.*.applied "$output_dir"/*.applied 2>/dev/null || true
     
     # Log file
     LOG=$output_dir/pipeline.log
@@ -146,47 +142,34 @@ analyze_sample() {
     # PART 1: CORE PIPELINE
     # ═══════════════════════════════════════════════════════════════
     
-    # 1. FastQC
-    step 1 "Quality Control"
-    if [ -f "$output_dir/.override_qc_gate" ] && [ -d "$output_dir/fastqc" ] && [ "$(ls -A $output_dir/fastqc 2>/dev/null)" ]; then
-        echo "  ⚠️  [SUPERVISOR] Operator Override active — FastQC reports already exist. Fast-forwarding..."
-    else
-        fastqc -t $threads -o $output_dir/fastqc $r1_path $r2_path
-    fi
-    echo "✅ QC complete"
-    
-    # 2. Read Trimming & Remediation — Layer 2 Execution Worker & Supervisor Gate
-    # Universal execution of fastp with autonomous Supervisor remediation loop.
-    # Supervisor evaluates fastp_report.json against qc.json:
-    #   - 0: Approved (Clinical or Research Grade Flag & Continue) -> advance
-    #   - 42: Remediation required -> re-runs fastp with tighter parameters (retry <= 2)
-    #   - 1: Rejection floor or hardware failure -> halts pipeline before Alignment
-    step 2 "Read Trimming & Remediation"
-    
-    # ── Check for Operator Override Fast-Forward ──
-    # If the user clicked Override & Force Run and trimmed reads already exist, resume directly without re-computing
-    if [ -f "$output_dir/.override_qc_gate" ] && [ -f "$output_dir/trimmed/r1_trimmed.fastq.gz" ] && [ -f "$output_dir/trimmed/fastp_report.json" ]; then
-        echo "  ⚠️  [SUPERVISOR] Operator Override active with existing trimmed FASTQs."
-        echo "  Executing gate evaluation to apply override and resuming straight to Alignment..."
-        set +e
-        node "$SCRIPT_DIR/scripts/stage1_qc_gate.js" "$output_dir" "$sample_name"
-        gate_status=$?
-        set -e
-        if [ "$gate_status" -eq 0 ]; then
-            echo "✅ Stage 1 QC Authorized via Operator Override. Proceeding directly to Alignment."
-        else
-            echo "❌ [SUPERVISOR] Gate evaluation failed with code $gate_status"
-            exit $gate_status
+    # ── Checkpoint: Stage 1 (QC & Trimming) ──
+    stage1_approved=0
+    if [ -s "$output_dir/trimmed/r1_trimmed.fastq.gz" ] && [ -s "$output_dir/trimmed/fastp_report.json" ]; then
+        if [ -f "$output_dir/.override_qc_gate" ]; then
+            stage1_approved=1
+            mv "$output_dir/.override_qc_gate" "$output_dir/.override_qc_gate.applied" 2>/dev/null || true
+        elif [ -f "$output_dir/supervisor_reasoning.json" ]; then
+            s1_tier=$(grep '"tier":' "$output_dir/supervisor_reasoning.json" 2>/dev/null || echo "")
+            if [[ "$s1_tier" != *"HALT"* && "$s1_tier" != *"CRASH"* ]]; then
+                stage1_approved=1
+            fi
         fi
+    fi
+
+    if [ $stage1_approved -eq 1 ]; then
+        echo "⏩ [CHECKPOINT] Stage 1 (QC & Trimming) already completed and approved. Skipping to Alignment..."
     else
-        # Fresh / Normal run: ensure no lingering retry flags or stale reports from previous runs
+        step 1 "Quality Control"
+        fastqc -t $threads -o $output_dir/fastqc $r1_path $r2_path
+        echo "✅ QC complete"
+
+        step 2 "Read Trimming & Remediation"
         rm -f "$output_dir/trimmed/.retry_count" "$output_dir/trimmed/.remediation_flags" "$output_dir/trimmed/fastp_report.json"
         extra_qc_flags=""
         qc_attempt=0
         max_qc_attempts=3
         while [ $qc_attempt -lt $max_qc_attempts ]; do
             qc_attempt=$((qc_attempt + 1))
-            # Clear fastp_report.json before run to prevent stale report if tool crashes
             rm -f "$output_dir/trimmed/fastp_report.json"
 
             if [ -n "$extra_qc_flags" ]; then
@@ -196,7 +179,7 @@ analyze_sample() {
                 echo "  [SUPERVISOR] Profiling raw read quality & adapter content (pass-through)..."
                 fastp_args="--detect_adapter_for_pe --disable_quality_filtering"
             fi
-            
+
             set +e
             fastp -i "$r1_path" -I "$r2_path" \
                 -o "$output_dir/trimmed/r1_trimmed.fastq.gz" \
@@ -213,13 +196,12 @@ analyze_sample() {
             if [ $fastp_status -ne 0 ]; then
                 echo "❌ [SUPERVISOR] fastp failed with exit code $fastp_status (binary crash or IO failure)."
             fi
-            
-            # ── Supervisor Gate & Two-Tier Reviewer Evaluation (qc.json) ──
+
             set +e
             node "$SCRIPT_DIR/scripts/stage1_qc_gate.js" "$output_dir" "$sample_name"
             gate_status=$?
             set -e
-            
+
             if [ "$gate_status" -eq 0 ]; then
                 echo "✅ Stage 1 QC Approved by Supervisor. Proceeding to Alignment."
                 break
@@ -242,32 +224,35 @@ analyze_sample() {
             echo "❌ [SUPERVISOR] Maximum QC remediation attempts ($max_qc_attempts) exceeded without reaching quality threshold."
             exit 1
         fi
+        echo "✅ Trimming complete"
     fi
-    echo "✅ Trimming complete"
     
-    # 3. Alignment & Coordinate Sorting (Piped Streaming)
-    step 3 "Read Alignment & Coordinate Sorting"
-    mkdir -p $output_dir/aligned $output_dir/sorted $output_dir/dedup
-    
-    # Layer 1 Storage Custodian: Remove any leftover orphaned SAM/BAM files from previous interrupted runs
-    rm -f $output_dir/aligned/aligned.sam $output_dir/aligned/aligned.bam
-    
-    # ── Check for Operator Override Fast-Forward ──
-    if [ -f "$output_dir/.override_align_gate" ] && [ -s "$output_dir/sorted/sorted.bam" ] && [ -s "$output_dir/aligned/alignment_flagstat.txt" ]; then
-        echo "  ⚠️  [SUPERVISOR] Operator Override active with existing sorted BAM."
-        echo "  Executing gate evaluation to apply override and resuming straight to Deduplication..."
-        set +e
-        node "$SCRIPT_DIR/scripts/stage2_align_gate.js" "$output_dir" "$sample_name"
-        ALIGN_EXIT=$?
-        set -e
-        if [ $ALIGN_EXIT -eq 0 ]; then
-            echo "✅ Stage 2 Alignment Authorized via Operator Override. Proceeding directly to Deduplication."
-        else
-            echo "❌ [SUPERVISOR] Alignment gate evaluation failed with code $ALIGN_EXIT"
-            exit $ALIGN_EXIT
+    # ── Checkpoint: Stage 2 (Alignment & Coordinate Sorting) ──
+    stage2_approved=0
+    has_alignment_bam=0
+    if [ -s "$output_dir/sorted/sorted.bam" ] || [ -s "$output_dir/dedup/dedup.bam" ]; then
+        has_alignment_bam=1
+    fi
+
+    if [ $has_alignment_bam -eq 1 ] && [ -s "$output_dir/aligned/alignment_flagstat.txt" ]; then
+        if [ -f "$output_dir/.override_align_gate" ]; then
+            stage2_approved=1
+            mv "$output_dir/.override_align_gate" "$output_dir/.override_align_gate.applied" 2>/dev/null || true
+        elif [ -f "$output_dir/stage2_alignment_reasoning.json" ]; then
+            s2_tier=$(grep '"tier":' "$output_dir/stage2_alignment_reasoning.json" 2>/dev/null || echo "")
+            if [[ "$s2_tier" != *"HALT"* && "$s2_tier" != *"CRASH"* ]]; then
+                stage2_approved=1
+            fi
         fi
+    fi
+
+    if [ $stage2_approved -eq 1 ]; then
+        echo "⏩ [CHECKPOINT] Stage 2 (Alignment & Coordinate Sorting) already completed and approved. Skipping to Deduplication..."
     else
-        # Read Stage 1 Supervisor Downstream Directives
+        step 3 "Read Alignment & Coordinate Sorting"
+        mkdir -p $output_dir/aligned $output_dir/sorted $output_dir/dedup
+        rm -f $output_dir/aligned/aligned.sam $output_dir/aligned/aligned.bam
+
         BWA_FLAGS="-M -Y"
         if [ -f "$output_dir/supervisor_reasoning.json" ]; then
             CUSTOM_FLAGS=$(node -e '
@@ -282,7 +267,7 @@ analyze_sample() {
         fi
         echo "  [SUPERVISOR DIRECTIVES] Injecting BWA-MEM flags: $BWA_FLAGS"
         echo "  [STREAMING ALIGNMENT] Piping BWA-MEM directly to samtools sort (0 GB uncompressed SAM on disk)..."
-        
+
         set +e
         bwa mem -t $threads $BWA_FLAGS \
             -R "@RG\tID:${sample_name}\tSM:${sample_name}\tPL:ILLUMINA\tLB:lib_${sample_name}\tPU:unit1" \
@@ -292,30 +277,28 @@ analyze_sample() {
             | samtools sort -@ $threads -o $output_dir/sorted/sorted.bam -
         bwa_pipe_status=( "${PIPESTATUS[@]}" )
         set -e
-        
+
         if [ ${bwa_pipe_status[0]:-0} -ne 0 ] || [ ${bwa_pipe_status[1]:-0} -ne 0 ] || [ ! -s "$output_dir/sorted/sorted.bam" ]; then
             echo "❌ Alignment or sorting failed (BWA exit: ${bwa_pipe_status[0]:-0}, samtools sort exit: ${bwa_pipe_status[1]:-0}). Check disk space and memory."
             exit 1
         fi
-        
+
         samtools index $output_dir/sorted/sorted.bam
         echo "✅ Alignment & coordinate sorting complete"
-        
-        # 4. Alignment Metrics
+
         step 4 "Alignment Metrics"
         echo "  [ALIGNMENT METRICS] Computing flagstat, stats, and idxstats..."
         samtools flagstat -@ $threads $output_dir/sorted/sorted.bam > $output_dir/aligned/alignment_flagstat.txt
         samtools stats -@ $threads $output_dir/sorted/sorted.bam > $output_dir/aligned/alignment_stats.txt
         samtools idxstats $output_dir/sorted/sorted.bam > $output_dir/aligned/alignment_idxstats.txt
         echo "✅ Alignment metrics generated"
-        
-        # Stage 2: Alignment Cognitive Supervisor Gate
+
         echo "  [SUPERVISOR] Evaluating Stage 2 Alignment metrics against clinical policies (qc.json)..."
         set +e
         node "$SCRIPT_DIR/scripts/stage2_align_gate.js" "$output_dir" "$sample_name"
         ALIGN_EXIT=$?
         set -e
-        
+
         if [ $ALIGN_EXIT -ne 0 ]; then
             if [ $ALIGN_EXIT -eq 1 ]; then
                 echo ""
@@ -334,8 +317,8 @@ analyze_sample() {
                 exit 1
             fi
         fi
+        echo "✅ Stage 2 Alignment Approved by Supervisor. Proceeding to Deduplication."
     fi
-    echo "✅ Stage 2 Alignment Approved by Supervisor. Proceeding to Deduplication."
     
     # 5. Duplicate Marking (formerly step 6)
     step 5 "Mark Duplicates"
@@ -367,14 +350,16 @@ analyze_sample() {
             ' "$output_dir/stage2_alignment_reasoning.json" 2>/dev/null)
             [ -n "$CUSTOM_PICARD" ] && PICARD_EXTRA="$CUSTOM_PICARD"
         fi
-        echo "  [SUPERVISOR DIRECTIVES] Injecting MarkDuplicates parameters: $PICARD_EXTRA"
+        # Sanitize PICARD_EXTRA: ensure --CREATE_INDEX is stripped so it is never passed twice to GATK
+        CLEAN_PICARD_EXTRA=$(echo "$PICARD_EXTRA" | sed -E 's/--CREATE_INDEX[ =]+(true|false)//g')
+        echo "  [SUPERVISOR DIRECTIVES] Injecting MarkDuplicates parameters: $CLEAN_PICARD_EXTRA"
         
         $GATK MarkDuplicates \
             -I $output_dir/sorted/sorted.bam \
             -O $output_dir/dedup/dedup.bam \
             -M $output_dir/dedup/metrics.txt \
             --CREATE_INDEX true \
-            $PICARD_EXTRA
+            $CLEAN_PICARD_EXTRA
         
         # Ensure index exists as both dedup.bai and dedup.bam.bai for universal tool compatibility
         if [ -f "$output_dir/dedup/dedup.bai" ] && [ ! -f "$output_dir/dedup/dedup.bam.bai" ]; then
