@@ -192,13 +192,30 @@ if (isTestMode || minVariantsOverride) {
   }
 }
 
-// 10. Execute 3-Tier Callset Triage
+// 10. Read Consanguinity F_ROH & Target BED status
+let frohConfirmed = false;
+let frohValue = null;
+const frohPath = path.join(qcDir, "froh.json");
+if (fs.existsSync(frohPath)) {
+  try {
+    const frohData = JSON.parse(fs.readFileSync(frohPath, "utf8"));
+    frohValue = frohData.froh != null ? frohData.froh : null;
+    frohConfirmed = Boolean(frohData.frohConfirmed || (frohValue != null && frohValue >= 0.05));
+  } catch {}
+}
+
+const isTargetBedUsed = process.env.TARGET_BED_USED === "1" || fs.existsSync(path.join(outputDir, "intervals.bed"));
+
+// 11. Execute 3-Tier Callset Triage
 const triage = variantTriageEngine.evaluateVariantTriage({
   sampleName,
   metrics,
   isPassVcf: isPassOnly,
   qcPolicy,
-  isOperatorOverride: hasOverride
+  isOperatorOverride: hasOverride,
+  isTargetBedUsed,
+  frohConfirmed,
+  froh: frohValue
 });
 
 if (floorSwitch.active) {

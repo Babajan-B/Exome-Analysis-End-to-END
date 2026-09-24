@@ -730,6 +730,28 @@ analyze_sample() {
         step 8 "Variant Calling"
         mkdir -p $output_dir/variants $output_dir/filtered
 
+        # Detect target intervals BED if available
+        REF_DIR="$(dirname "$REFERENCE")"
+        TARGET_BED_ARG=""
+        TARGET_BED_USED=0
+        CANDIDATE_BEDS=(
+            "${TARGET_BED:-}"
+            "${TARGET_INTERVALS:-}"
+            "$REF_DIR/target_intervals.bed"
+            "$REF_DIR/intervals/coding_exons.bed"
+            "$output_dir/intervals.bed"
+            "$WORK_DIR/intervals/coding_exons.bed"
+        )
+        for bed in "${CANDIDATE_BEDS[@]}"; do
+            if [ -n "$bed" ] && [ -s "$bed" ]; then
+                echo "  [EXECUTION AGENT] Applying Exome Target Intervals BED: $bed"
+                TARGET_BED_ARG="-L $bed --interval-padding 100"
+                TARGET_BED_USED=1
+                break
+            fi
+        done
+        export TARGET_BED_USED
+
         HC_EXTRA_ARGS=""
         if [ -f "$output_dir/stage4_bqsr_reasoning.json" -o -f "$output_dir/qc/stage4_bqsr_reasoning.json" ]; then
             S4_FILE="$output_dir/stage4_bqsr_reasoning.json"
@@ -752,9 +774,10 @@ analyze_sample() {
             -O $output_dir/variants/raw_variants.vcf \
             --native-pair-hmm-threads $threads \
             --stand-call-conf 30.0 \
+            $TARGET_BED_ARG \
             $HC_EXTRA_ARGS
 
-        RAW_COUNT=$(grep -v "^#" $output_dir/variants/raw_variants.vcf | wc -l | tr -d ' ')
+        RAW_COUNT=$((grep -v "^#" "$output_dir/variants/raw_variants.vcf" 2>/dev/null || true) | wc -l | tr -d ' ')
         echo "✅ Called $RAW_COUNT raw variants"
 
         # 8. Filtering
@@ -777,13 +800,71 @@ analyze_sample() {
             --filter-expression "!vc.isSNP() && SOR > 10.0" --filter-name "HighSOR_INDEL" \
             --filter-expression "!vc.isSNP() && ReadPosRankSum < -20.0" --filter-name "ReadPosBias_INDEL"
 
-        # Create PASS-only VCF
+        # Create PASS-only VCF (hardened against zero-PASS pipefail exit 1)
         PASS_VCF=$output_dir/filtered/filtered_PASS_only.vcf
-        grep "^#" $output_dir/filtered/filtered_variants.vcf > $PASS_VCF
-        grep -v "^#" $output_dir/filtered/filtered_variants.vcf | grep -w "PASS" >> $PASS_VCF
+        if command -v bcftools &>/dev/null; then
+            bcftools view -f PASS "$output_dir/filtered/filtered_variants.vcf" -o "$PASS_VCF" 2>/dev/null || {
+                grep "^#" "$output_dir/filtered/filtered_variants.vcf" > "$PASS_VCF" || true
+                (grep -v "^#" "$output_dir/filtered/filtered_variants.vcf" 2>/dev/null | grep -w "PASS" >> "$PASS_VCF") || true
+            }
+        else
+            grep "^#" "$output_dir/filtered/filtered_variants.vcf" > "$PASS_VCF" || true
+            (grep -v "^#" "$output_dir/filtered/filtered_variants.vcf" 2>/dev/null | grep -w "PASS" >> "$PASS_VCF") || true
+        fi
 
-        PASS_COUNT=$(grep -v "^#" $PASS_VCF | wc -l | tr -d ' ')
+        PASS_COUNT=$((grep -v "^#" "$PASS_VCF" 2>/dev/null || true) | wc -l | tr -d ' ')
         echo "✅ Filtered variants: $PASS_COUNT / $RAW_COUNT passed filters"
+
+        # Compute Runs of Homozygosity (F_ROH) for Consanguinity / Inbreeding assessment
+        mkdir -p "$output_dir/qc"
+        FROH_JSON="$output_dir/qc/froh.json"
+        if [ "$PASS_COUNT" -gt 0 ] && command -v bcftools &>/dev/null; then
+            echo "  [EXECUTION AGENT] Estimating Runs of Homozygosity (bcftools roh)..."
+            ROH_OUT="$output_dir/qc/roh.txt"
+            bcftools roh --AF-dflt 0.4 -G 30 --skip-indels -O r -o "$ROH_OUT" "$PASS_VCF" 2>/dev/null || true
+            if [ -s "$ROH_OUT" ]; then
+                node -e '
+                    const fs = require("fs");
+                    const rohPath = process.argv[1];
+                    const outPath = process.argv[2];
+                    try {
+                        const lines = fs.readFileSync(rohPath, "utf8").split("\n");
+                        let totalRohLength = 0;
+                        let rohBlockCount = 0;
+                        for (const line of lines) {
+                            if (!line || line.startsWith("#")) continue;
+                            const parts = line.split("\t");
+                            if (parts[0] === "RG") {
+                                const len = parseInt(parts[5], 10) || (parseInt(parts[4], 10) - parseInt(parts[3], 10));
+                                if (len > 0) {
+                                    totalRohLength += len;
+                                    rohBlockCount++;
+                                }
+                            }
+                        }
+                        const AUTOSOMAL_GENOME_SIZE = 2880000000;
+                        const froh = parseFloat((totalRohLength / AUTOSOMAL_GENOME_SIZE).toFixed(4));
+                        const frohConfirmed = froh >= 0.05;
+                        const payload = {
+                            froh,
+                            frohConfirmed,
+                            totalRohLength,
+                            rohBlockCount,
+                            autosomalGenomeSize: AUTOSOMAL_GENOME_SIZE,
+                            timestamp: new Date().toISOString()
+                        };
+                        fs.writeFileSync(outPath, JSON.stringify(payload, null, 2));
+                        console.log(`  [QC] Estimated F_ROH: ${froh} (${(totalRohLength / 1e6).toFixed(1)} Mb in ${rohBlockCount} ROH blocks, confirmed: ${frohConfirmed})`);
+                    } catch (e) {
+                        fs.writeFileSync(outPath, JSON.stringify({ froh: 0, frohConfirmed: false, error: e.message }, null, 2));
+                    }
+                ' "$ROH_OUT" "$FROH_JSON" 2>/dev/null || true
+            else
+                echo '{"froh":0,"frohConfirmed":false,"reason":"No ROH output or no markers"}' > "$FROH_JSON"
+            fi
+        else
+            echo '{"froh":0,"frohConfirmed":false,"reason":"PASS variants empty or bcftools not installed"}' > "$FROH_JSON"
+        fi
 
         # Stage 5 Cognitive Supervisor Gate
         echo "  [SUPERVISOR] Evaluating Stage 5 Variant Calling & Biology metrics against clinical policies (qc.json)..."
