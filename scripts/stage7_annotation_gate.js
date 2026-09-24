@@ -152,12 +152,13 @@ const triage = annotationTriageEngine.evaluateAnnotationTriage({
   normLogPath: path.join(qcDir, "bcftools_norm.log"),
   normStatusPath: path.join(qcDir, "norm_status.json"),
   pass1SummaryPath: path.join(qcDir, "pass1_filter_summary.json"),
+  haltReportPath,
   metrics,
   qcPolicy
 });
 
-// Override handling
-if (hasOverride && triage.exitCode === 1) {
+// Override handling for Stage 7's own floor failure
+if (hasOverride && triage.exitCode === 1 && !triage.upstreamHalt) {
   triage.tier = "TIER_2_RESEARCH_QUALIFIED";
   triage.exitCode = 0;
   triage.thought = `[SUPERVISOR OVERRIDE] Stage 7 Annotation Rejection Floor overridden by operator. Downstream analysis flagged as Research Grade.`;

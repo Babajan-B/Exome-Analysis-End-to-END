@@ -214,11 +214,19 @@ def main():
     retained_records = []
     sanger_records = []
 
+    # Frequency tracking counters
+    total_unknown_freq = 0
+    total_rare_freq = 0
+    total_common_freq = 0
+    shortlist_unknown_freq = 0
+    shortlist_rare_freq = 0
+    shortlist_common_freq = 0
+
     tsv_headers = [
         "Chr", "Pos", "Ref", "Alt", "Gene", "Transcript", "Impact", "Consequence",
         "HGVS_c", "HGVS_p", "Zygosity", "DP", "GQ", "AD", "AB", "Genotype_Confidence",
         "ClinVar_Significance", "ClinVar_RevStat", "ClinVar_Disease",
-        "Pop_AF", "AF_Source", "Retention_Reason", "Requires_Sanger"
+        "Pop_AF", "AF_Source", "Frequency_Status", "Retention_Reason", "Requires_Sanger"
     ]
 
     header_lines = []
@@ -271,6 +279,16 @@ def main():
             pop_af, af_source = extract_population_af(info)
             is_proven_common = (pop_af is not None and pop_af >= 0.01)
 
+            if pop_af is None:
+                freq_status = "AF_UNKNOWN"
+                total_unknown_freq += 1
+            elif is_proven_common:
+                freq_status = "POPULATION_COMMON"
+                total_common_freq += 1
+            else:
+                freq_status = "POPULATION_RARE"
+                total_rare_freq += 1
+
             # 3. snpEff consequence & impact
             has_high_mod, is_splice, max_impact, gene, transcript, consequence, hgvs_c, hgvs_p = parse_snpeff_annotations(info)
 
@@ -309,6 +327,13 @@ def main():
 
             candidate_genes.add(gene)
 
+            if freq_status == "AF_UNKNOWN":
+                shortlist_unknown_freq += 1
+            elif freq_status == "POPULATION_COMMON":
+                shortlist_common_freq += 1
+            else:
+                shortlist_rare_freq += 1
+
             # Check Sanger confirmation routing
             sanger_req = False
             if confidence == "LOW_CONFIDENCE_GENOTYPE" and (clinvar_plp or max_impact == "HIGH"):
@@ -328,7 +353,7 @@ def main():
                 chrom, pos, ref, alt, gene, transcript, max_impact, consequence,
                 hgvs_c, hgvs_p, zygosity, str(dp), str(gq), f"{ad0},{ad1}", f"{ab:.2f}", confidence,
                 clnsig, clnrevstat, clndn,
-                pop_af_str, af_source, retention_reason, sanger_str
+                pop_af_str, af_source, freq_status, retention_reason, sanger_str
             ]
             row_line = "\t".join(tsv_row) + "\n"
             f_tsv.write(row_line)
@@ -350,6 +375,17 @@ def main():
             "highModerateSpliceRetained": retained_high_moderate_splice,
             "provenCommonDropped": dropped_proven_common,
             "benignModifierDropped": dropped_benign_modifier
+        },
+        "populationFrequencyBreakdown": {
+            "unknownFrequencyCount": shortlist_unknown_freq,
+            "rareFrequencyCount": shortlist_rare_freq,
+            "commonFrequencyCount": shortlist_common_freq,
+            "shortlistUnknownFrequencyCount": shortlist_unknown_freq,
+            "shortlistRareFrequencyCount": shortlist_rare_freq,
+            "shortlistCommonFrequencyCount": shortlist_common_freq,
+            "totalInputUnknownCount": total_unknown_freq,
+            "totalInputRareCount": total_rare_freq,
+            "totalInputCommonCount": total_common_freq
         },
         "genotypeQc": {
             "lowConfidenceTagged": low_confidence_count,
@@ -385,6 +421,7 @@ def main():
     print(f"   • Filtered Out: {dropped_proven_common + dropped_benign_modifier} variants")
     print(f"     - Proven Common Polymorphisms (AF >= 1%): {dropped_proven_common}")
     print(f"     - Benign / Synonymous / Modifier: {dropped_benign_modifier}")
+    print(f"   • Shortlist Population Frequencies: {shortlist_rare_freq} Rare (< 1%), {shortlist_unknown_freq} Unknown (AF_UNKNOWN), {shortlist_common_freq} Common (ClinVar-exempted)")
     print(f"   • Genotype QC & Sanger Routing:")
     print(f"     - Low Confidence Genotypes Tagged: {low_confidence_count}")
     print(f"     - Routed for Stage 9 Sanger Confirmation: {sanger_required_count}")

@@ -833,8 +833,10 @@ analyze_sample() {
             fi
 
             # Check for reference build mismatch (REF_MISMATCH rate)
-            MISMATCH_COUNT=$(grep -c "^REF_MISMATCH" "$output_dir/qc/bcftools_norm.log" 2>/dev/null || echo 0)
-            TOTAL_CHECKED=$(grep "total/split" "$output_dir/qc/bcftools_norm.log" 2>/dev/null | sed -E 's/.*:[[:space:]]*([0-9]+).*/\1/' || echo "$PASS_COUNT")
+            MISMATCH_COUNT=$(grep -c "^REF_MISMATCH" "$output_dir/qc/bcftools_norm.log" 2>/dev/null || true)
+            MISMATCH_COUNT=${MISMATCH_COUNT:-0}
+            TOTAL_CHECKED=$(grep "total/split" "$output_dir/qc/bcftools_norm.log" 2>/dev/null | sed -E 's/.*:[[:space:]]*([0-9]+).*/\1/' || true)
+            TOTAL_CHECKED=${TOTAL_CHECKED:-$PASS_COUNT}
             [ -z "$TOTAL_CHECKED" ] || [ "$TOTAL_CHECKED" -eq 0 ] && TOTAL_CHECKED=1
             
             MISMATCH_PCT=$(awk -v m="$MISMATCH_COUNT" -v t="$TOTAL_CHECKED" 'BEGIN { printf "%.2f", (m / t) * 100 }')
@@ -1051,29 +1053,31 @@ analyze_sample() {
     fi
 
     # 13. Stage 7 Variant Functional Annotation & Integrity Supervisor Gate
-    step 13 "Stage 7 Supervisor Quality Gate"
-    echo "  [SUPERVISOR] Evaluating Stage 7 Annotation Integrity & Clinical Grounding (qc.json)..."
-    set +e
-    node "$SCRIPT_DIR/scripts/stage7_annotation_gate.js" "$output_dir" "$sample_name" "$REFERENCE"
-    S7_EXIT=$?
-    set -e
+    if [ -f "$ANNOTATED_VCF" ]; then
+        step 13 "Stage 7 Supervisor Quality Gate"
+        echo "  [SUPERVISOR] Evaluating Stage 7 Annotation Integrity & Clinical Grounding (qc.json)..."
+        set +e
+        node "$SCRIPT_DIR/scripts/stage7_annotation_gate.js" "$output_dir" "$sample_name" "$REFERENCE"
+        S7_EXIT=$?
+        set -e
 
-    if [ $S7_EXIT -ne 0 ]; then
-        if [ $S7_EXIT -eq 1 ]; then
-            echo ""
-            echo "🛑 [PIPELINE HALTED] Stage 7 Annotation Gate failed clinical rejection floor."
-            echo "   Human-in-the-Loop Operator Opinion Gate is required."
-            echo "   Use the Web Dashboard to review anomalies or run: touch \"$output_dir/.override_annotation_gate\"."
-            exit 1
-        elif [ $S7_EXIT -eq 2 ]; then
-            echo "❌ [FATAL] Tool crash or reference build mismatch during annotation. Pipeline halted."
-            exit 2
-        else
-            echo "❌ [ERROR] Unknown Stage 7 gate error ($S7_EXIT)."
-            exit 1
+        if [ $S7_EXIT -ne 0 ]; then
+            if [ $S7_EXIT -eq 1 ]; then
+                echo ""
+                echo "🛑 [PIPELINE HALTED] Stage 7 Annotation Gate failed clinical rejection floor."
+                echo "   Human-in-the-Loop Operator Opinion Gate is required."
+                echo "   Use the Web Dashboard to review anomalies or run: touch \"$output_dir/.override_annotation_gate\"."
+                exit 1
+            elif [ $S7_EXIT -eq 2 ]; then
+                echo "❌ [FATAL] Tool crash or reference build mismatch during annotation. Pipeline halted."
+                exit 2
+            else
+                echo "❌ [ERROR] Unknown Stage 7 gate error ($S7_EXIT)."
+                exit 1
+            fi
         fi
+        echo "✅ Stage 7 Variant Functional Annotation & Integrity Approved by Supervisor."
     fi
-    echo "✅ Stage 7 Variant Functional Annotation & Integrity Approved by Supervisor."
     
     echo ""
     echo "✅ Sample $sample_name: COMPLETE!"
