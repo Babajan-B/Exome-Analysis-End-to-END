@@ -1065,6 +1065,19 @@ analyze_sample() {
             "$sample_name" || echo "⚠️ Pass 2 Enrichment completed with non-fatal warnings (Offline/Partial Fallback preserved)."
     fi
 
+    # 12c. Pass 3 Inheritance Filtering & ACMG Clinical Prioritization (Phase 5)
+    PASS2_JSON="$output_dir/annotation/${sample_name}_pass2_enriched.json"
+    if [ ! -f "$PASS2_JSON" ]; then
+        PASS2_JSON="$output_dir/annovar/${sample_name}_pass2_enriched.json"
+    fi
+    if [ -f "$PASS2_JSON" ] || [ -f "$PASS1_TSV" ]; then
+        step "12c" "Pass 3 Clinical Prioritization & ACMG Guidelines Classification"
+        echo "  [EXECUTION AGENT] Running Pass 3 Inheritance Filtering & ClinGen ACMG Scoring..."
+        python3 "$SCRIPT_DIR/scripts/pass3_clinical_prioritization.py" \
+            "$output_dir" \
+            "$sample_name" || echo "⚠️ Pass 3 Prioritization completed with non-fatal warnings."
+    fi
+
     # 13. Stage 7 Variant Functional Annotation & Integrity Supervisor Gate
     if [ -f "$ANNOTATED_VCF" ]; then
         step 13 "Stage 7 Supervisor Quality Gate"

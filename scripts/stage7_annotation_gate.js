@@ -153,6 +153,7 @@ const triage = annotationTriageEngine.evaluateAnnotationTriage({
   normStatusPath: path.join(qcDir, "norm_status.json"),
   pass1SummaryPath: path.join(qcDir, "pass1_filter_summary.json"),
   pass2SummaryPath: path.join(qcDir, "pass2_enrichment_summary.json"),
+  pass3SummaryPath: path.join(qcDir, "pass3_prioritization_summary.json"),
   haltReportPath,
   metrics,
   qcPolicy
