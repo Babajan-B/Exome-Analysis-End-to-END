@@ -1,17 +1,29 @@
 #!/usr/bin/env python3
 """
-Pass 2: Batch API Enrichment & In-Silico Calibration Script
+Pass 2: Batch API Enrichment & Pathogenicity Calibration Engine (Version 2.6.0)
 
-Enriches the Pass 1 Permissive Candidate Shortlist via MyVariant.info:
-1. Padded-SNV Two-Way Trimmed HGVS Formatter:
-   Translates VCF records to HGVS genomic notation (SNV, pure ins/del, delins, padded-SNVs).
-2. MyVariant.info Batch POST Query:
-   Retrieves gnomAD exome/genome frequencies, popmax, FAF95, ClinVar, REVEL, SpliceAI, AlphaMissense, and CADD.
-3. ClinGen-Calibrated In-Silico Annotations:
-   Applies ClinGen calibrated evidence rules (Pejaver 2022 for REVEL, ClinGen SVI for SpliceAI, Cheng 2023 for AlphaMissense).
-4. Frequency Status Classification:
-   Resolves AF_UNKNOWN to POPULATION_RARE, POPULATION_COMMON, or POPULATION_ABSENT_COVERED.
-5. Emits:
+Enriches the Pass 1 Permissive Candidate Shortlist via MyVariant.info with ClinGen calibration:
+1. Padded-SNV Two-Way Trimmed HGVS Formatter & Syntax Validation:
+   Translates VCF records to canonical HGVS genomic notation (SNV, pure ins/del, delins, padded-SNVs).
+   Validates syntax before submission; malformed/multi-allelic records stay AF_UNKNOWN.
+2. Operator Consent Gate:
+   External API enrichment is OFF by default. Requires explicit per-job opt-in:
+   --enable-api-enrichment, $output_dir/.enable_api_enrichment, or ENABLE_API_ENRICHMENT=1.
+   Recorded in the audit trail.
+3. MyVariant.info Batch POST Query:
+   Retrieves gnomAD exome/genome frequencies, popmax fallback, ClinVar RCVs, REVEL, and AlphaMissense.
+4. ClinGen-Calibrated In-Silico Annotations:
+   - REVEL: Pejaver 2022 calibrated evidence rules (takes max of transcript list).
+   - AlphaMissense: Cheng 2023 under dbnsfp.alphamissense (takes max of transcript list).
+   - SpliceAI: Reported as 'not_available' when not provided by endpoint.
+5. ClinVar Reclassification Sentinel:
+   Aggregates across all RCV assertions and compares with local ClinVar release to detect CLINVAR_RECLASSIFIED.
+6. Frequency Status Classification:
+   - Valid query with population AF >= 0.01 -> POPULATION_COMMON
+   - Valid query with population AF < 0.01 -> POPULATION_RARE
+   - Valid query confirmed absent in gnomAD -> ABSENT_COVERAGE_UNVERIFIED
+   - Malformed query, lookup failure, or offline -> AF_UNKNOWN
+7. Emits:
    - {sample_name}_pass2_enriched.tsv
    - {sample_name}_pass2_enriched.json
    - {output_dir}/qc/pass2_enrichment_summary.json
@@ -20,26 +32,41 @@ Enriches the Pass 1 Permissive Candidate Shortlist via MyVariant.info:
 
 import sys
 import os
+import re
 import json
 import urllib.request
 import urllib.parse
 from datetime import datetime, timezone
 
+# Strict HGVS genomic validation regex
+HGVS_REGEX = re.compile(
+    r"^chr(?:[1-9]|1[0-9]|2[0-2]|X|Y|M|MT):g\.(\d+)(?:_(\d+))?(?:del[ACGTN]*|ins[ACGTN]+|delins[ACGTN]+|[ACGTN]>[ACGTN]|=)$"
+)
+
 def format_to_hgvs_genomic(chrom, pos, ref, alt):
     """
     Translates a normalized VCF record to MyVariant.info HGVS genomic notation.
     Handles two-way prefix/suffix trimming and resolves padded SNVs directly to canonical SNV format.
+    Returns (hgvs_str, is_valid) tuple.
     """
     chr_prefix = chrom if chrom.startswith("chr") else f"chr{chrom}"
     ref = (ref or "").strip().upper()
     alt = (alt or "").strip().upper()
 
+    # Reject un-split multi-allelic records or invalid bases
+    if "," in alt or "," in ref or not ref or not alt:
+        return None, False
+    if not re.match(r"^[ACGTN]+$", ref) or not re.match(r"^[ACGTN]+$", alt):
+        return None, False
+
     if ref == alt:
-        return f"{chr_prefix}:g.{pos}="
+        hgvs = f"{chr_prefix}:g.{pos}="
+        return hgvs, True
 
     # Direct SNV
     if len(ref) == 1 and len(alt) == 1:
-        return f"{chr_prefix}:g.{pos}{ref}>{alt}"
+        hgvs = f"{chr_prefix}:g.{pos}{ref}>{alt}"
+        return hgvs, True
 
     trimmed_ref = ref
     trimmed_alt = alt
@@ -58,21 +85,45 @@ def format_to_hgvs_genomic(chrom, pos, ref, alt):
 
     # Padded SNV
     if len(trimmed_ref) == 1 and len(trimmed_alt) == 1:
-        return f"{chr_prefix}:g.{curr_pos}{trimmed_ref}>{trimmed_alt}"
+        hgvs = f"{chr_prefix}:g.{curr_pos}{trimmed_ref}>{trimmed_alt}"
+        return hgvs, True
 
     # Pure Deletion
     if len(trimmed_ref) > 0 and len(trimmed_alt) == 0:
         start_pos = curr_pos
         end_pos = curr_pos + len(trimmed_ref) - 1
-        return f"{chr_prefix}:g.{start_pos}del" if start_pos == end_pos else f"{chr_prefix}:g.{start_pos}_{end_pos}del"
+        hgvs = f"{chr_prefix}:g.{start_pos}del" if start_pos == end_pos else f"{chr_prefix}:g.{start_pos}_{end_pos}del"
+        return hgvs, True
 
     # Pure Insertion
     if len(trimmed_ref) == 0 and len(trimmed_alt) > 0:
-        return f"{chr_prefix}:g.{curr_pos - 1}_{curr_pos}ins{trimmed_alt}"
+        hgvs = f"{chr_prefix}:g.{curr_pos - 1}_{curr_pos}ins{trimmed_alt}"
+        return hgvs, True
 
     # Complex Delins
-    end_pos = curr_pos + len(trimmed_ref) - 1
-    return f"{chr_prefix}:g.{curr_pos}delins{trimmed_alt}" if curr_pos == end_pos else f"{chr_prefix}:g.{curr_pos}_{end_pos}delins{trimmed_alt}"
+    if len(trimmed_ref) > 0 and len(trimmed_alt) > 0:
+        end_pos = curr_pos + len(trimmed_ref) - 1
+        hgvs = f"{chr_prefix}:g.{curr_pos}delins{trimmed_alt}" if curr_pos == end_pos else f"{chr_prefix}:g.{curr_pos}_{end_pos}delins{trimmed_alt}"
+        return hgvs, True
+
+    return None, False
+
+def extract_float(val, take_max=True):
+    """
+    Safely extracts float from scalars, lists, or tuples (taking max if multiple).
+    """
+    if val is None:
+        return None
+    if isinstance(val, (list, tuple)):
+        floats = [extract_float(x, take_max=take_max) for x in val]
+        valid = [f for f in floats if f is not None]
+        if not valid:
+            return None
+        return max(valid) if take_max else valid[0]
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
 
 def calibrate_revel(score):
     if score is None:
@@ -88,15 +139,6 @@ def calibrate_revel(score):
     if score <= 0.183:
         return "BENIGN_SUPPORTING", -1.0, "BP4_Supporting"
     return "INDETERMINATE", 0.0, None
-
-def calibrate_spliceai(max_delta):
-    if max_delta is None:
-        return None, None
-    if max_delta >= 0.50:
-        return "SUPPORTING", "PP3_Supporting"
-    if max_delta <= 0.10:
-        return "BENIGN_SUPPORTING", "BP4_Supporting"
-    return "INDETERMINATE", None
 
 def classify_alphamissense(score):
     if score is None:
@@ -123,40 +165,72 @@ def calculate_clinvar_stars(review_status):
         return 1
     return 0
 
-def extract_float(val):
-    if val is None:
-        return None
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return None
+def check_consent_gate(output_dir, extra_args):
+    """
+    Consent gate: API enrichment is OFF by default.
+    Opt-in via:
+    - command-line arg: --enable-api-enrichment, consent=true, optin
+    - marker file: $output_dir/.enable_api_enrichment
+    - env var: ENABLE_API_ENRICHMENT=1
+    """
+    if os.environ.get("ENABLE_API_ENRICHMENT") == "1":
+        return True
+    if os.path.exists(os.path.join(output_dir, ".enable_api_enrichment")):
+        return True
+    for arg in extra_args:
+        arg_lower = str(arg).lower().strip("-")
+        if arg_lower in ["enable_api_enrichment", "enable-api-enrichment", "consent=true", "consent", "optin", "true"]:
+            return True
+    return False
+
+def find_shortlist_tsv(output_dir, sample_name):
+    """
+    Finds the Pass 1 shortlist TSV, checking annotation/ first to prevent symlink breakage.
+    """
+    candidates = [
+        os.path.join(output_dir, "annotation", f"{sample_name}_pass1_shortlist.tsv"),
+        os.path.join(output_dir, "annovar", f"{sample_name}_pass1_shortlist.tsv")
+    ]
+    for c in candidates:
+        if os.path.lexists(c):
+            # If it's a symlink, resolve real path
+            target = os.path.realpath(c)
+            if os.path.exists(target):
+                return target
+    return None
 
 def main():
     if len(sys.argv) < 3:
-        print("Usage: pass2_batch_enrichment.py <output_dir> <sample_name> [offline_mode]")
+        print("Usage: pass2_batch_enrichment.py <output_dir> <sample_name> [options...]")
         sys.exit(1)
 
     output_dir = os.path.abspath(sys.argv[1])
     sample_name = sys.argv[2]
-    offline_mode = len(sys.argv) > 3 and sys.argv[3].lower() in ["true", "1", "offline"]
+    extra_args = sys.argv[3:]
 
-    annot_dir = os.path.join(output_dir, "annovar")
+    consent_granted = check_consent_gate(output_dir, extra_args)
+
+    annot_dir = os.path.join(output_dir, "annotation")
+    annovar_dir = os.path.join(output_dir, "annovar")
     qc_dir = os.path.join(output_dir, "qc")
+    os.makedirs(annot_dir, exist_ok=True)
+    os.makedirs(annovar_dir, exist_ok=True)
     os.makedirs(qc_dir, exist_ok=True)
 
-    shortlist_tsv = os.path.join(annot_dir, f"{sample_name}_pass1_shortlist.tsv")
+    shortlist_tsv = find_shortlist_tsv(output_dir, sample_name)
     cache_path = os.path.join(qc_dir, "myvariant_cache.json")
     out_enriched_tsv = os.path.join(annot_dir, f"{sample_name}_pass2_enriched.tsv")
     out_enriched_json = os.path.join(annot_dir, f"{sample_name}_pass2_enriched.json")
     summary_json = os.path.join(qc_dir, "pass2_enrichment_summary.json")
 
-    if not os.path.exists(shortlist_tsv):
-        print(f"⚠️  Shortlist TSV not found at {shortlist_tsv}. Skipping Pass 2 enrichment.")
+    if not shortlist_tsv or not os.path.exists(shortlist_tsv):
+        print(f"⚠️  Shortlist TSV not found in {output_dir}/annotation or annovar. Skipping Pass 2 enrichment.")
         sys.exit(0)
 
     print("════════════════════════════════════════════════════════════")
     print(f"PASS 2: Batch API Enrichment & Pathogenicity Calibration")
     print(f"Sample: {sample_name} | Target: {shortlist_tsv}")
+    print(f"Consent Gate: {'GRANTED (Live API Enabled)' if consent_granted else 'NOT GRANTED (Offline Fallback Path 3)'}")
     print("════════════════════════════════════════════════════════════")
 
     # Load cache if available
@@ -185,33 +259,40 @@ def main():
         print("  [PASS 2] Shortlist is empty. Writing empty enriched outputs.")
         sys.exit(0)
 
-    # Format HGVS for all rows
+    # Format & Validate HGVS for all rows
     hgvs_list = []
+    valid_mask = []
     for r in rows:
         c = r[col_map["Chr"]]
         p = r[col_map["Pos"]]
         ref = r[col_map["Ref"]]
         alt = r[col_map["Alt"]]
-        hgvs = format_to_hgvs_genomic(c, p, ref, alt)
-        hgvs_list.append(hgvs)
+        hgvs, is_valid = format_to_hgvs_genomic(c, p, ref, alt)
+        if is_valid and hgvs and HGVS_REGEX.match(hgvs):
+            hgvs_list.append(hgvs)
+            valid_mask.append(True)
+        else:
+            hgvs_list.append(hgvs or f"{c}:{p}_{ref}>{alt}_MALFORMED")
+            valid_mask.append(False)
 
-    execution_path = "PATH_3_OFFLINE_FALLBACK" if offline_mode else "PATH_2_BATCH_API"
-    missing_hgvs = [h for h in hgvs_list if h not in cache]
-    cache_hits = len(hgvs_list) - len(missing_hgvs)
+    execution_path = "PATH_2_BATCH_API" if consent_granted else "PATH_3_OFFLINE_FALLBACK"
+    
+    # Missing valid entries to query
+    valid_hgvs_to_query = [hgvs_list[i] for i in range(total_candidates) if valid_mask[i] and hgvs_list[i] not in cache]
+    cache_hits = sum(1 for i in range(total_candidates) if valid_mask[i] and hgvs_list[i] in cache)
     api_requests = 0
 
-    if not offline_mode and len(missing_hgvs) > 0:
-        print(f"  [PASS 2] Querying MyVariant.info for {len(missing_hgvs)} variants ({cache_hits} cached)...")
-        # Batch up to 1000
+    if consent_granted and len(valid_hgvs_to_query) > 0:
+        print(f"  [PASS 2] Querying MyVariant.info for {len(valid_hgvs_to_query)} valid variants ({cache_hits} cached)...")
         BATCH_SIZE = 1000
-        for i in range(0, len(missing_hgvs), BATCH_SIZE):
-            chunk = missing_hgvs[i:i + BATCH_SIZE]
+        for i in range(0, len(valid_hgvs_to_query), BATCH_SIZE):
+            chunk = valid_hgvs_to_query[i:i + BATCH_SIZE]
             api_requests += 1
             url = "https://myvariant.info/v1/variant"
             params = urllib.parse.urlencode({
                 "ids": ",".join(chunk),
                 "assembly": "hg19",
-                "fields": "gnomad_exome,gnomad_genome,clinvar,dbnsfp,cadd,spliceai,alphamissense,dbsnp"
+                "fields": "gnomad_exome,gnomad_genome,clinvar,dbnsfp.revel,dbnsfp.alphamissense,cadd,dbsnp"
             }).encode("utf-8")
 
             req = urllib.request.Request(
@@ -228,12 +309,12 @@ def main():
                                 q_id = hit.get("query") or hit.get("_id")
                                 if q_id:
                                     cache[q_id] = hit
-                        print(f"  ✅ Batch {api_requests} successfully returned {len(data) if isinstance(data, list) else 1} results.")
+                        print(f"  ✅ Batch {api_requests} successfully returned results.")
                     else:
-                        print(f"⚠️  MyVariant returned HTTP status {resp.status}. Entering Partial/Fallback mode.")
+                        print(f"⚠️  MyVariant returned HTTP status {resp.status}. Entering Partial mode.")
                         execution_path = "PATH_4_PARTIAL"
             except Exception as e:
-                print(f"⚠️  MyVariant query failed ({e}). Proceeding under Partial/Fallback mode.")
+                print(f"⚠️  MyVariant query failed ({e}). Proceeding under Partial mode.")
                 execution_path = "PATH_4_PARTIAL"
 
         # Save cache
@@ -248,23 +329,26 @@ def main():
     enriched_tsv_rows = []
     updated_shortlist_rows = []
 
-    status_counts = {"absentCovered": 0, "absentUnverified": 0, "rare": 0, "common": 0, "unknown": 0}
+    status_counts = {"absentUnverified": 0, "rare": 0, "common": 0, "unknown": 0}
     insilico_counts = {
         "revelStrong": 0, "revelModerate": 0, "revelSupporting": 0,
-        "spliceAiSupporting": 0, "alphaMissenseLikelyPathogenic": 0, "caddDeleterious": 0
+        "alphaMissenseLikelyPathogenic": 0, "caddDeleterious": 0,
+        "spliceAi": "not_available"
     }
     clinvar_matches = 0
     clinvar_plp_count = 0
+    clinvar_reclassified_count = 0
 
     enriched_headers = header + [
         "REVEL_Score", "REVEL_Evidence", "SpliceAI_MaxDS", "SpliceAI_Evidence",
         "AlphaMissense_Score", "AlphaMissense_Class", "CADD_Phred",
-        "gnomAD_Popmax_AF", "gnomAD_FAF95_Popmax", "gnomAD_Hom_Count"
+        "gnomAD_Popmax_AF", "gnomAD_Hom_Count", "ClinVar_Reclassified"
     ]
 
     for idx, r in enumerate(rows):
         hgvs = hgvs_list[idx]
-        hit = cache.get(hgvs, {})
+        is_valid = valid_mask[idx]
+        hit = cache.get(hgvs, {}) if is_valid else {}
 
         c = r[col_map["Chr"]]
         p = int(r[col_map["Pos"]])
@@ -296,22 +380,14 @@ def main():
 
         af_exome = extract_float(gnomad_exome.get("af", {}).get("af") if isinstance(gnomad_exome.get("af"), dict) else gnomad_exome.get("af"))
         af_genome = extract_float(gnomad_genome.get("af", {}).get("af") if isinstance(gnomad_genome.get("af"), dict) else gnomad_genome.get("af"))
-        af_popmax = extract_float(gnomad_exome.get("af_popmax") or gnomad_exome.get("popmax"))
         
-        # Calculate popmax if missing
+        # Popmax fallback
+        af_popmax = extract_float(gnomad_exome.get("af_popmax") or gnomad_exome.get("popmax"))
         if af_popmax is None and isinstance(gnomad_exome.get("af"), dict):
             sub_afs = [extract_float(gnomad_exome["af"].get(k)) for k in ["af_afr", "af_amr", "af_eas", "af_nfe", "af_sas"]]
             valid_sub = [s for s in sub_afs if s is not None]
-            if len(valid_sub) > 0:
+            if valid_sub:
                 af_popmax = max(valid_sub)
-
-        faf95_global = extract_float(gnomad_exome.get("faf95", {}).get("faf95") if isinstance(gnomad_exome.get("faf95"), dict) else gnomad_exome.get("faf95"))
-        faf95_popmax = None
-        if isinstance(gnomad_exome.get("faf95"), dict):
-            fafs = [extract_float(gnomad_exome["faf95"].get(k)) for k in ["faf95_afr", "faf95_amr", "faf95_eas", "faf95_nfe", "faf95_sas"]]
-            valid_fafs = [f for f in fafs if f is not None]
-            if len(valid_fafs) > 0:
-                faf95_popmax = max(valid_fafs)
 
         hom_count = extract_float(gnomad_exome.get("hom", {}).get("hom") if isinstance(gnomad_exome.get("hom"), dict) else gnomad_exome.get("hom"))
 
@@ -319,97 +395,112 @@ def main():
         effective_af = af_exome if af_exome is not None else (af_genome if af_genome is not None else pop_af_orig)
         effective_source = "gnomAD_exome" if af_exome is not None else ("gnomAD_genome" if af_genome is not None else af_source_orig)
 
-        # ClinVar
+        # ClinVar RCV aggregation and reclassification check
         cv = hit.get("clinvar", {})
-        rcv = cv.get("rcv")
-        if isinstance(rcv, list) and len(rcv) > 0:
-            rcv = rcv[0]
-        elif not isinstance(rcv, dict):
-            rcv = {}
+        rcv_entries = cv.get("rcv", [])
+        if isinstance(rcv_entries, dict):
+            rcv_entries = [rcv_entries]
+        elif not isinstance(rcv_entries, list):
+            rcv_entries = []
 
-        cv_sig = rcv.get("clinical_significance") or (clnsig_orig if clnsig_orig != "." else None)
-        cv_rev = rcv.get("review_status") or (clnrev_orig if clnrev_orig != "." else None)
-        cv_stars = calculate_clinvar_stars(cv_rev)
-        is_plp = cv_sig is not None and "pathogenic" in cv_sig.lower() and "conflict" not in cv_sig.lower()
-        if cv_sig:
+        api_sigs = []
+        api_revs = []
+        for rcv in rcv_entries:
+            if isinstance(rcv, dict):
+                sig_val = rcv.get("clinical_significance")
+                if sig_val:
+                    api_sigs.append(str(sig_val))
+                rev_val = rcv.get("review_status")
+                if rev_val:
+                    api_revs.append(str(rev_val))
+
+        cv_sig_primary = clnsig_orig if clnsig_orig and clnsig_orig != "." else (api_sigs[0] if api_sigs else None)
+        cv_rev_primary = clnrev_orig if clnrev_orig and clnrev_orig != "." else (api_revs[0] if api_revs else None)
+        cv_stars = calculate_clinvar_stars(cv_rev_primary)
+
+        # Detect CLINVAR_RECLASSIFIED
+        is_reclassified = False
+        if clnsig_orig and clnsig_orig != "." and api_sigs:
+            local_is_plp = "pathogenic" in clnsig_orig.lower() and "conflict" not in clnsig_orig.lower()
+            api_has_plp = any("pathogenic" in s.lower() and "conflict" not in s.lower() for s in api_sigs)
+            api_is_benign = all("benign" in s.lower() for s in api_sigs)
+            if (local_is_plp and not api_has_plp) or (not local_is_plp and api_has_plp):
+                is_reclassified = True
+                clinvar_reclassified_count += 1
+
+        is_plp = cv_sig_primary is not None and "pathogenic" in cv_sig_primary.lower() and "conflict" not in cv_sig_primary.lower()
+        if cv_sig_primary:
             clinvar_matches += 1
             if is_plp:
                 clinvar_plp_count += 1
 
-        # Frequency status
-        if effective_af is not None:
+        # Frequency Status determination
+        if not is_valid:
+            # Malformed query or un-split multi-allelic: NEVER absent!
+            freq_status = "AF_UNKNOWN"
+            status_counts["unknown"] += 1
+        elif effective_af is not None:
             if effective_af >= 0.01:
                 freq_status = "POPULATION_COMMON"
                 status_counts["common"] += 1
             else:
                 freq_status = "POPULATION_RARE"
                 status_counts["rare"] += 1
-        elif hit and not hit.get("notfound"):
-            # Variant was found in MyVariant without AF -> rare or absent
-            freq_status = "POPULATION_ABSENT_COVERED"
-            status_counts["absentCovered"] += 1
-        elif hit and hit.get("notfound"):
-            # Confirmed absent in gnomAD
-            freq_status = "POPULATION_ABSENT_COVERED"
-            status_counts["absentCovered"] += 1
+        elif consent_granted and (hit.get("notfound") or (hit and not af_exome and not af_genome)):
+            # Valid query confirmed absent from gnomAD without coverage data
+            freq_status = "ABSENT_COVERAGE_UNVERIFIED"
+            status_counts["absentUnverified"] += 1
         else:
             freq_status = "AF_UNKNOWN"
             status_counts["unknown"] += 1
 
         # In-silico predictors
-        revel_score = extract_float(hit.get("dbnsfp", {}).get("revel", {}).get("score"))
+        # 1. REVEL (handling per-transcript list)
+        revel_raw = hit.get("dbnsfp", {}).get("revel", {}).get("score")
+        revel_score = extract_float(revel_raw, take_max=True)
         revel_ev, revel_pts, revel_rule = calibrate_revel(revel_score)
         if revel_ev == "STRONG": insilico_counts["revelStrong"] += 1
         elif revel_ev == "MODERATE": insilico_counts["revelModerate"] += 1
         elif revel_ev == "SUPPORTING": insilico_counts["revelSupporting"] += 1
 
-        # SpliceAI
-        spliceai_max = extract_float(hit.get("spliceai", {}).get("ds_max"))
-        if spliceai_max is None and "spliceai" in hit:
-            s_deltas = [extract_float(hit["spliceai"].get(k)) for k in ["ds_ag", "ds_al", "ds_dg", "ds_dl"]]
-            v_deltas = [d for d in s_deltas if d is not None]
-            if len(v_deltas) > 0:
-                spliceai_max = max(v_deltas)
-        splice_ev, splice_rule = calibrate_spliceai(spliceai_max)
-        if splice_ev == "SUPPORTING": insilico_counts["spliceAiSupporting"] += 1
-
-        # AlphaMissense
-        am_score = extract_float(hit.get("alphamissense", {}).get("am_pathogenicity"))
+        # 2. AlphaMissense (under dbnsfp.alphamissense)
+        am_raw = hit.get("dbnsfp", {}).get("alphamissense", {}).get("score")
+        am_score = extract_float(am_raw, take_max=True)
         am_class = classify_alphamissense(am_score)
         if am_class == "likely_pathogenic": insilico_counts["alphaMissenseLikelyPathogenic"] += 1
 
-        # CADD
-        cadd_phred = extract_float(hit.get("cadd", {}).get("phred"))
+        # 3. CADD
+        cadd_phred = extract_float(hit.get("cadd", {}).get("phred"), take_max=True)
         if cadd_phred is not None and cadd_phred >= 20.0:
             insilico_counts["caddDeleterious"] += 1
 
-        # Build updated TSV row for shortlist (in-place enrichment)
+        # Build updated shortlist TSV row
         updated_r = list(r)
-        if freq_status == "POPULATION_ABSENT_COVERED":
+        if freq_status == "ABSENT_COVERAGE_UNVERIFIED":
             updated_r[col_map["Pop_AF"]] = "0.000000"
             updated_r[col_map["AF_Source"]] = "gnomAD_absent"
         else:
             updated_r[col_map["Pop_AF"]] = f"{effective_af:.6f}" if effective_af is not None else "AF_UNKNOWN"
             updated_r[col_map["AF_Source"]] = effective_source
         updated_r[col_map["Frequency_Status"]] = freq_status
-        if cv_sig:
-            updated_r[col_map["ClinVar_Significance"]] = cv_sig
-        if cv_rev:
-            updated_r[col_map["ClinVar_RevStat"]] = cv_rev
+        if cv_sig_primary:
+            updated_r[col_map["ClinVar_Significance"]] = cv_sig_primary
+        if cv_rev_primary:
+            updated_r[col_map["ClinVar_RevStat"]] = cv_rev_primary
         updated_shortlist_rows.append(updated_r)
 
         # Build enriched TSV row
         enriched_row = updated_r + [
             f"{revel_score:.4f}" if revel_score is not None else "NA",
             revel_ev or "NA",
-            f"{spliceai_max:.4f}" if spliceai_max is not None else "NA",
-            splice_ev or "NA",
+            "not_available", # SpliceAI
+            "NA",
             f"{am_score:.4f}" if am_score is not None else "NA",
             am_class or "NA",
             f"{cadd_phred:.2f}" if cadd_phred is not None else "NA",
             f"{af_popmax:.6f}" if af_popmax is not None else "NA",
-            f"{faf95_popmax:.6f}" if faf95_popmax is not None else "NA",
-            str(int(hom_count)) if hom_count is not None else "NA"
+            str(int(hom_count)) if hom_count is not None else "NA",
+            "true" if is_reclassified else "false"
         ]
         enriched_tsv_rows.append(enriched_row)
 
@@ -420,7 +511,8 @@ def main():
             "pos": p,
             "ref": ref,
             "alt": alt,
-            "hgvsGenomic": hgvs,
+            "hgvsGenomic": hgvs if is_valid else None,
+            "isValidHgvs": is_valid,
             "zygosity": zygosity,
             "primaryGene": gene,
             "primaryTranscript": transcript,
@@ -437,25 +529,26 @@ def main():
                 "gnomadExomeAf": af_exome,
                 "gnomadGenomeAf": af_genome,
                 "gnomadPopmaxAf": af_popmax,
-                "faf95Global": faf95_global,
-                "faf95Popmax": faf95_popmax,
+                "popmaxFallbackUsed": af_popmax is not None,
                 "homozygoteCount": int(hom_count) if hom_count is not None else None,
                 "effectiveAf": effective_af,
                 "frequencyStatus": freq_status,
                 "afSource": effective_source
             },
             "clinvar": {
-                "significance": cv_sig,
-                "reviewStatus": cv_rev,
+                "localSignificance": clnsig_orig,
+                "apiSignificances": api_sigs,
+                "primarySignificance": cv_sig_primary,
+                "reviewStatus": cv_rev_primary,
                 "stars": cv_stars,
-                "isPathogenic": is_plp
-            } if cv_sig else None,
+                "isPathogenic": is_plp,
+                "isReclassified": is_reclassified
+            } if cv_sig_primary else None,
             "inSilico": {
                 "revelScore": revel_score,
                 "revelEvidence": revel_ev,
                 "revelAcmgPoints": revel_pts,
-                "spliceAiMaxDelta": spliceai_max,
-                "spliceAiEvidence": splice_ev,
+                "spliceAi": "not_available",
                 "alphaMissenseScore": am_score,
                 "alphaMissenseClass": am_class,
                 "caddPhred": cadd_phred,
@@ -463,27 +556,27 @@ def main():
             },
             "auditProvenance": {
                 "executionPath": execution_path,
+                "consentGranted": consent_granted,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "cacheHit": hgvs in cache
+                "cacheHit": is_valid and hgvs in cache
             }
         }
         enriched_json_records.append(record_json)
 
-    # 1. Write enriched TSV
+    # 1. Write enriched TSV & JSON to annotation/
     with open(out_enriched_tsv, "w", encoding="utf-8") as f:
         f.write("\t".join(enriched_headers) + "\n")
         for r in enriched_tsv_rows:
             f.write("\t".join(r) + "\n")
 
-    # 2. Write enriched JSON
     with open(out_enriched_json, "w", encoding="utf-8") as f:
         json.dump(enriched_json_records, f, indent=2)
 
-    # 3. Update shortlist TSV in-place with resolved frequencies (so Stage 7 Gate reads it directly)
+    # 2. Update shortlist TSV in-place
     backup_tsv = shortlist_tsv + ".pre_enrichment"
     if not os.path.exists(backup_tsv):
         try:
-            os.rename(shortlist_tsv, backup_tsv)
+            os.replace(shortlist_tsv, backup_tsv)
         except Exception:
             pass
 
@@ -492,16 +585,34 @@ def main():
         for r in updated_shortlist_rows:
             f.write("\t".join(r) + "\n")
 
+    # 3. Create or refresh symlinks in annovar/ using absolute paths
+    legacy_enriched_tsv = os.path.join(annovar_dir, f"{sample_name}_pass2_enriched.tsv")
+    legacy_enriched_json = os.path.join(annovar_dir, f"{sample_name}_pass2_enriched.json")
+    legacy_shortlist_tsv = os.path.join(annovar_dir, f"{sample_name}_pass1_shortlist.tsv")
+    for link_target, link_dest in [
+        (out_enriched_tsv, legacy_enriched_tsv),
+        (out_enriched_json, legacy_enriched_json),
+        (shortlist_tsv, legacy_shortlist_tsv)
+    ]:
+        if link_target != link_dest:
+            try:
+                if os.path.lexists(link_dest):
+                    os.remove(link_dest)
+                os.symlink(os.path.abspath(link_target), link_dest)
+            except OSError:
+                pass
+
     # 4. Write summary JSON
     summary_data = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "sampleName": sample_name,
         "executionPath": execution_path,
+        "consentGranted": consent_granted,
         "totalCandidatesQueried": total_candidates,
         "cacheHits": cache_hits,
         "apiRequests": api_requests,
         "populationFrequencyBreakdown": {
-            "absentCovered": status_counts["absentCovered"],
+            "absentUnverified": status_counts["absentUnverified"],
             "rare": status_counts["rare"],
             "common": status_counts["common"],
             "unknown": status_counts["unknown"]
@@ -509,6 +620,7 @@ def main():
         "inSilicoEvidenceBreakdown": insilico_counts,
         "clinvarMatches": clinvar_matches,
         "clinvarPlpCount": clinvar_plp_count,
+        "clinvarReclassifiedCount": clinvar_reclassified_count,
         "artifacts": {
             "enrichedTsv": out_enriched_tsv,
             "enrichedJson": out_enriched_json,
@@ -520,9 +632,11 @@ def main():
         json.dump(summary_data, f, indent=2)
 
     print(f"✅ Pass 2 Enrichment Complete for {sample_name}!")
-    print(f"   Execution Path: {execution_path}")
-    print(f"   Resolved Frequencies: {status_counts['rare']} Rare, {status_counts['absentCovered']} Absent Covered, {status_counts['common']} Common, {status_counts['unknown']} Unknown.")
-    print(f"   In-Silico: {insilico_counts['revelStrong']} REVEL Strong, {insilico_counts['spliceAiSupporting']} SpliceAI Supporting, {insilico_counts['alphaMissenseLikelyPathogenic']} AlphaMissense Pathogenic.")
+    print(f"   Execution Path: {execution_path} (Consent: {consent_granted})")
+    print(f"   Resolved Frequencies: {status_counts['rare']} Rare, {status_counts['absentUnverified']} Absent (Unverified), {status_counts['common']} Common, {status_counts['unknown']} Unknown.")
+    print(f"   In-Silico: {insilico_counts['revelStrong']} REVEL Strong, {insilico_counts['alphaMissenseLikelyPathogenic']} AlphaMissense Pathogenic, SpliceAI: not_available.")
+    if clinvar_reclassified_count > 0:
+        print(f"   ⚠️ ClinVar Reclassifications Detected: {clinvar_reclassified_count} variants differed between local and API release.")
     print(f"   Artifacts generated: {os.path.basename(out_enriched_tsv)}, {os.path.basename(out_enriched_json)}")
 
 if __name__ == "__main__":

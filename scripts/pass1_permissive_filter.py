@@ -50,11 +50,22 @@ def extract_population_af(info_str):
         if item.startswith("CAF="):
             val = item.split("=")[1].strip("[]")
             parts = val.split(",")
-            # In dbSNP CAF: parts[0] = REF freq, parts[1] = ALT1 freq
-            if len(parts) > 1 and parts[1] != ".":
+            freq_str = parts[1] if len(parts) > 1 else parts[0]
+            if freq_str != "." and freq_str:
                 try:
-                    pop_af = float(parts[1])
+                    pop_af = float(freq_str)
                     af_source = "dbSNP_CAF"
+                    break
+                except (ValueError, IndexError):
+                    pass
+        elif item.startswith("TOPMED="):
+            val = item.split("=")[1].strip("[]")
+            parts = val.split(",")
+            freq_str = parts[1] if len(parts) > 1 else parts[0]
+            if freq_str != "." and freq_str:
+                try:
+                    pop_af = float(freq_str)
+                    af_source = "TOPMED"
                     break
                 except (ValueError, IndexError):
                     pass
@@ -184,8 +195,8 @@ def main():
         print("Usage: pass1_permissive_filter.py <input_vcf> <output_dir> [sample_name]")
         sys.exit(1)
 
-    input_vcf = sys.argv[1]
-    output_dir = sys.argv[2]
+    input_vcf = os.path.abspath(sys.argv[1])
+    output_dir = os.path.abspath(sys.argv[2])
     sample_name = sys.argv[3] if len(sys.argv) > 3 else "Sample"
 
     # Destination directories
@@ -407,10 +418,15 @@ def main():
     legacy_shortlist_vcf = os.path.join(annovar_dir, f"{sample_name}_pass1_shortlist.vcf")
     legacy_shortlist_tsv = os.path.join(annovar_dir, f"{sample_name}_pass1_shortlist.tsv")
     try:
-        if not os.path.exists(legacy_shortlist_vcf):
-            os.symlink(out_vcf_path, legacy_shortlist_vcf)
-        if not os.path.exists(legacy_shortlist_tsv):
-            os.symlink(out_tsv_path, legacy_shortlist_tsv)
+        if os.path.lexists(legacy_shortlist_vcf):
+            os.remove(legacy_shortlist_vcf)
+        os.symlink(os.path.abspath(out_vcf_path), legacy_shortlist_vcf)
+    except OSError:
+        pass
+    try:
+        if os.path.lexists(legacy_shortlist_tsv):
+            os.remove(legacy_shortlist_tsv)
+        os.symlink(os.path.abspath(out_tsv_path), legacy_shortlist_tsv)
     except OSError:
         pass
 

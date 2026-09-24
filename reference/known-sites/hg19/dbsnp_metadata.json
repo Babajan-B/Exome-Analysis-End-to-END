@@ -1,0 +1,33 @@
+{
+  "file": "dbsnp.vcf.gz",
+  "build": "hg19 / GRCh37",
+  "preparation_date": "2026-09-24T18:04:00+03:00",
+  "sha256": "37068eed696f7a9030b11ff5468405749baf9ae9e8ea286d84d7f37b46e62599",
+  "size_bytes": 1643584286,
+  "size_human": "1.5GB",
+  "transformations": [
+    "bcftools view with Number=R header fixes for CAF and TOPMED",
+    "bcftools norm -m -any to split multi-allelic sites into distinct records with per-allele frequencies",
+    "tabix -p vcf indexing"
+  ],
+  "verified_variants": [
+    {
+      "rsid": "rs667859",
+      "chrom": "chr1",
+      "pos": 2488153,
+      "ref": "A",
+      "alt": "C",
+      "caf_alt": 0.4347,
+      "status": "POPULATION_COMMON"
+    },
+    {
+      "rsid": "rs2442513",
+      "chrom": "chr6",
+      "pos": 31324391,
+      "ref": "G",
+      "alt": "A",
+      "caf_alt": 0.9169,
+      "status": "POPULATION_COMMON"
+    }
+  ]
+}

@@ -973,10 +973,10 @@ analyze_sample() {
 
         # 10b. SnpSift dbSNP CAF frequency annotation
         if [ -f "$SNPEFF_DIR/SnpSift.jar" ] && [ -f "$KNOWN_DBSNP" ]; then
-            echo "  Annotating global allele frequency (CAF/COMMON) from dbSNP via SnpSift..."
+            echo "  Annotating global allele frequency (CAF/COMMON/TOPMED) from dbSNP via SnpSift..."
             java -jar $SNPEFF_DIR/SnpSift.jar annotate \
                 -tabix \
-                -info CAF,COMMON \
+                -info CAF,COMMON,TOPMED \
                 $KNOWN_DBSNP \
                 $output_dir/annovar/snpeff/${sample_name}_snpEff_annotated.vcf \
                 > $output_dir/annovar/snpeff/${sample_name}_final_annotated.vcf
@@ -1053,7 +1053,11 @@ analyze_sample() {
     fi
 
     # 12b. Pass 2 Batch API Enrichment & Pathogenicity Calibration (Phase 4)
-    if [ -f "$output_dir/annovar/${sample_name}_pass1_shortlist.tsv" ]; then
+    PASS1_TSV="$output_dir/annotation/${sample_name}_pass1_shortlist.tsv"
+    if [ ! -f "$PASS1_TSV" ]; then
+        PASS1_TSV="$output_dir/annovar/${sample_name}_pass1_shortlist.tsv"
+    fi
+    if [ -f "$PASS1_TSV" ]; then
         step "12b" "Pass 2 Batch API Enrichment (gnomAD popmax, REVEL, SpliceAI)"
         echo "  [EXECUTION AGENT] Running Pass 2 Batch Enrichment (MyVariant.info & ClinGen Calibrations)..."
         python3 "$SCRIPT_DIR/scripts/pass2_batch_enrichment.py" \
