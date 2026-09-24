@@ -821,7 +821,15 @@ analyze_sample() {
         if [ "$PASS_COUNT" -gt 0 ] && command -v bcftools &>/dev/null; then
             echo "  [EXECUTION AGENT] Estimating Runs of Homozygosity (bcftools roh)..."
             ROH_OUT="$output_dir/qc/roh.txt"
-            bcftools roh --AF-dflt 0.4 -G 30 --skip-indels -O r -o "$ROH_OUT" "$PASS_VCF" 2>/dev/null || true
+            ROH_AF_ARGS="--AF-dflt 0.4"
+            if [ -n "$ROH_AF_FILE" ] && [ -f "$ROH_AF_FILE" ]; then
+                echo "  [QC] Using population allele frequencies from: $ROH_AF_FILE"
+                ROH_AF_ARGS="--AF-file $ROH_AF_FILE --AF-dflt 0.4"
+            elif [ -f "$KNOWN_SITES_DIR/dbsnp.roh_af.tab.gz" ]; then
+                echo "  [QC] Using dbSNP population allele frequencies from: $KNOWN_SITES_DIR/dbsnp.roh_af.tab.gz"
+                ROH_AF_ARGS="--AF-file $KNOWN_SITES_DIR/dbsnp.roh_af.tab.gz --AF-dflt 0.4"
+            fi
+            bcftools roh $ROH_AF_ARGS -G 30 --skip-indels -O r -o "$ROH_OUT" "$PASS_VCF" 2>/dev/null || true
             if [ -s "$ROH_OUT" ]; then
                 node -e '
                     const fs = require("fs");
