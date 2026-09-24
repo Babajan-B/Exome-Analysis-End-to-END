@@ -151,6 +151,7 @@ const triage = annotationTriageEngine.evaluateAnnotationTriage({
   outputDir,
   normLogPath: path.join(qcDir, "bcftools_norm.log"),
   normStatusPath: path.join(qcDir, "norm_status.json"),
+  pass1SummaryPath: path.join(qcDir, "pass1_filter_summary.json"),
   metrics,
   qcPolicy
 });

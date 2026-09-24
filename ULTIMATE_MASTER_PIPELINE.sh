@@ -41,18 +41,17 @@ echo "    3. Read Trimming (fastp)"
 echo "    4. Alignment (BWA-MEM)"
 echo "    5. BAM Processing (sort, mark duplicates)"
 echo "    6. Variant Calling (GATK HaplotypeCaller)"
-echo "    7. Variant Filtering"
-echo "    8. ANNOVAR Annotation (5 databases)"
-echo "    9. Variant Type Separation (SNPs, Indels)"
+echo "    7. Variant Filtering & Pre-Annotation Normalization (bcftools norm)"
 echo ""
-echo "  PART 2: ADVANCED ANNOTATION"
-echo "    10. snpEff Annotation"
-echo "    11. Add Zygosity Information"
-echo "    12. Functional Classification"
+echo "  PART 2: ADAPTIVE MULTI-ANNOTATION & CLINICAL FUNNEL"
+echo "    8. Functional Annotation (snpEff + SnpSift dbSNP CAF + NCBI ClinVar)"
+echo "    9. Annotation Tables & Classifications (generate_annotation_table.py)"
+echo "    10. Pass 1 Permissive Candidate Shortlist & Genotype Triage (pass1_permissive_filter.py)"
+echo "    11. Stage 7 Annotation Integrity Supervisor Gate (stage7_annotation_gate.js)"
 echo ""
 echo "  PART 3: FINAL PACKAGING"
-echo "    13. Compress VCF files"
-echo "    14. Create ZIP Archive"
+echo "    12. Compress VCF files"
+echo "    13. Create ZIP Archive"
 echo ""
 echo "Started: $(date)"
 echo ""
@@ -953,62 +952,12 @@ analyze_sample() {
         echo "✅ Stage 5 Variant Calling & Callset Biology Approved by Supervisor. Proceeding to Annotation."
     fi
     
-    # 9. ANNOVAR Annotation
-    step 10 "ANNOVAR Annotation"
-    
-    if [ -d "$ANNOVAR_DIR" ]; then
-        perl $ANNOVAR_DIR/table_annovar.pl \
-            $PASS_VCF \
-            $ANNOVAR_DIR/humandb/ \
-            -buildver hg19 \
-            -out $output_dir/annovar/annotated_${sample_name} \
-            -remove \
-            -protocol refGene,clinvar_20240917,gnomad211_exome,avsnp150,dbnsfp42a \
-            -operation g,f,f,f,f \
-            -nastring . \
-            -vcfinput \
-            -polish
-        
-        echo "✅ ANNOVAR annotation complete"
-    else
-        echo "⚠️  ANNOVAR not found - skipping"
-    fi
-    
-    # 10. Basic Variant Type Separation
-    step 11 "Variant Type Separation"
-    
-    ANNOT_FILE=$output_dir/annovar/annotated_${sample_name}.hg19_multianno.txt
-    if [ -f "$ANNOT_FILE" ]; then
-        SEPARATED_DIR=$output_dir/annovar/separated_by_type
-        mkdir -p $SEPARATED_DIR
-        
-        HEADER=$(head -1 $ANNOT_FILE)
-        
-        # SNPs
-        echo "$HEADER" > $SEPARATED_DIR/SNPs.txt
-        tail -n +2 $ANNOT_FILE | awk -F'\t' 'length($4)==1 && length($5)==1' >> $SEPARATED_DIR/SNPs.txt
-        
-        # Insertions
-        echo "$HEADER" > $SEPARATED_DIR/Insertions.txt
-        tail -n +2 $ANNOT_FILE | awk -F'\t' 'length($4) < length($5)' >> $SEPARATED_DIR/Insertions.txt
-        
-        # Deletions
-        echo "$HEADER" > $SEPARATED_DIR/Deletions.txt
-        tail -n +2 $ANNOT_FILE | awk -F'\t' 'length($4) > length($5)' >> $SEPARATED_DIR/Deletions.txt
-        
-        SNP_COUNT=$(($(wc -l < $SEPARATED_DIR/SNPs.txt) - 1))
-        INS_COUNT=$(($(wc -l < $SEPARATED_DIR/Insertions.txt) - 1))
-        DEL_COUNT=$(($(wc -l < $SEPARATED_DIR/Deletions.txt) - 1))
-        
-        echo "✅ Separated: SNPs=$SNP_COUNT, Insertions=$INS_COUNT, Deletions=$DEL_COUNT"
-    fi
-    
     # ═══════════════════════════════════════════════════════════════
-    # PART 2: ADVANCED ANNOTATION
+    # PART 2: ADAPTIVE MULTI-ANNOTATION & CLINICAL FUNNEL
     # ═══════════════════════════════════════════════════════════════
     
-    # 11. snpEff Annotation
-    step 12 "snpEff Annotation"
+    # 10. snpEff & SnpSift Annotation (dbSNP + NCBI ClinVar)
+    step 10 "Variant Functional Annotation (snpEff & SnpSift)"
     
     if [ -f "$SNPEFF_DIR/snpEff.jar" ] && [ -f "$PASS_VCF" ]; then
         java -Xmx8g -jar $SNPEFF_DIR/snpEff.jar \
@@ -1020,7 +969,7 @@ analyze_sample() {
         
         echo "✅ snpEff annotation complete"
 
-        # 11b. SnpSift dbSNP CAF frequency annotation
+        # 10b. SnpSift dbSNP CAF frequency annotation
         if [ -f "$SNPEFF_DIR/SnpSift.jar" ] && [ -f "$KNOWN_DBSNP" ]; then
             echo "  Annotating global allele frequency (CAF/COMMON) from dbSNP via SnpSift..."
             java -jar $SNPEFF_DIR/SnpSift.jar annotate \
@@ -1039,7 +988,7 @@ analyze_sample() {
             fi
         fi
 
-        # 11c. SnpSift ClinVar clinical significance annotation (CLNSIG, CLNREVSTAT, CLNDN, CLNDISDB, CLNVC)
+        # 10c. SnpSift ClinVar clinical significance annotation (CLNSIG, CLNREVSTAT, CLNDN, CLNDISDB, CLNVC)
         if [ -f "$SNPEFF_DIR/SnpSift.jar" ] && [ -f "$KNOWN_CLINVAR" ]; then
             echo "  [EXECUTION AGENT] Annotating ClinVar clinical significance (CLNSIG, CLNREVSTAT, CLNDN, CLNDISDB, CLNVC)..."
             java -jar "$SNPEFF_DIR/SnpSift.jar" annotate \
@@ -1060,9 +1009,25 @@ analyze_sample() {
     else
         echo "⚠️  snpEff not found - skipping"
     fi
+
+    # Auxiliary ANNOVAR run (optional, non-blocking)
+    if [ -d "$ANNOVAR_DIR" ] && [ -f "$ANNOVAR_DIR/table_annovar.pl" ] && [ -d "$ANNOVAR_DIR/humandb" ]; then
+        echo "  [L2 WORKER] Auxiliary ANNOVAR detected - running supplementary annotation..."
+        perl $ANNOVAR_DIR/table_annovar.pl \
+            $PASS_VCF \
+            $ANNOVAR_DIR/humandb/ \
+            -buildver hg19 \
+            -out $output_dir/annovar/annotated_${sample_name} \
+            -remove \
+            -protocol refGene,clinvar_20240917,gnomad211_exome,avsnp150,dbnsfp42a \
+            -operation g,f,f,f,f \
+            -nastring . \
+            -vcfinput \
+            -polish || echo "⚠️ Auxiliary ANNOVAR failed non-fatally"
+    fi
     
-    # 12. Generate Annotation Tables & Functional Classifications
-    step 13 "Generating Annotation Tables & Classifications"
+    # 11. Generate Annotation Tables & Functional Classifications
+    step 11 "Generating Annotation Tables & Classifications"
     
     ANNOTATED_VCF="$output_dir/annovar/snpeff/${sample_name}_snpEff_annotated.vcf"
     if [ -f "$ANNOTATED_VCF" ]; then
@@ -1075,8 +1040,18 @@ analyze_sample() {
         echo "⚠️ Annotated VCF not found - skipping table generation"
     fi
 
+    # 12. Pass 1 Permissive Candidate Shortlist & Genotype Triage
+    step 12 "Pass 1 Permissive Candidate Shortlist"
+    if [ -f "$ANNOTATED_VCF" ]; then
+        echo "  [EXECUTION AGENT] Running Pass 1 Permissive Funnel (ClinVar P/LP, High/Moderate, AF < 1%)..."
+        python3 "$SCRIPT_DIR/scripts/pass1_permissive_filter.py" \
+            "$ANNOTATED_VCF" \
+            "$output_dir" \
+            "$sample_name"
+    fi
+
     # 13. Stage 7 Variant Functional Annotation & Integrity Supervisor Gate
-    step 14 "Stage 7 Supervisor Quality Gate"
+    step 13 "Stage 7 Supervisor Quality Gate"
     echo "  [SUPERVISOR] Evaluating Stage 7 Annotation Integrity & Clinical Grounding (qc.json)..."
     set +e
     node "$SCRIPT_DIR/scripts/stage7_annotation_gate.js" "$output_dir" "$sample_name" "$REFERENCE"
