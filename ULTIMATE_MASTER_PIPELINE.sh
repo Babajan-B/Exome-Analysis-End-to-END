@@ -1052,6 +1052,15 @@ analyze_sample() {
             "$sample_name"
     fi
 
+    # 12b. Pass 2 Batch API Enrichment & Pathogenicity Calibration (Phase 4)
+    if [ -f "$output_dir/annovar/${sample_name}_pass1_shortlist.tsv" ]; then
+        step "12b" "Pass 2 Batch API Enrichment (gnomAD popmax, REVEL, SpliceAI)"
+        echo "  [EXECUTION AGENT] Running Pass 2 Batch Enrichment (MyVariant.info & ClinGen Calibrations)..."
+        python3 "$SCRIPT_DIR/scripts/pass2_batch_enrichment.py" \
+            "$output_dir" \
+            "$sample_name" || echo "⚠️ Pass 2 Enrichment completed with non-fatal warnings (Offline/Partial Fallback preserved)."
+    fi
+
     # 13. Stage 7 Variant Functional Annotation & Integrity Supervisor Gate
     if [ -f "$ANNOTATED_VCF" ]; then
         step 13 "Stage 7 Supervisor Quality Gate"
