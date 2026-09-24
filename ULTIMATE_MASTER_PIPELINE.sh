@@ -17,6 +17,7 @@ REFERENCE=$WORK_DIR/reference/hg19.fa
 REF_BUILD=$(basename "$REFERENCE" .fa)   # e.g. hg19 or hg38
 KNOWN_SITES_DIR=$WORK_DIR/reference/known-sites/$REF_BUILD
 KNOWN_DBSNP=$KNOWN_SITES_DIR/dbsnp.vcf.gz
+KNOWN_CLINVAR=$KNOWN_SITES_DIR/clinvar.vcf.gz
 KNOWN_MILLS=$KNOWN_SITES_DIR/mills.vcf.gz
 KNOWN_INDELS=$KNOWN_SITES_DIR/1000G_indels.vcf.gz
 ANNOVAR_DIR=$WORK_DIR/tools/annovar
@@ -815,6 +816,48 @@ analyze_sample() {
         PASS_COUNT=$((grep -v "^#" "$PASS_VCF" 2>/dev/null || true) | wc -l | tr -d ' ')
         echo "✅ Filtered variants: $PASS_COUNT / $RAW_COUNT passed filters"
 
+        # Normalize PASS variants: split multi-allelics (-m -any) and left-align indels (-f $REFERENCE)
+        # Verify 100% REF alleles against reference genome (-c w)
+        if command -v bcftools &>/dev/null && [ -s "$PASS_VCF" ]; then
+            echo "  [EXECUTION AGENT] Normalizing PASS variants (bcftools norm -m -any -c w -f $REFERENCE)..."
+            NORM_PASS_VCF="$output_dir/filtered/filtered_PASS_normalized.vcf"
+            mkdir -p "$output_dir/qc"
+            set +e
+            bcftools norm -m -any -c w -f "$REFERENCE" "$PASS_VCF" -o "$NORM_PASS_VCF" 2>"$output_dir/qc/bcftools_norm.log"
+            NORM_EXIT=$?
+            set -e
+
+            if [ $NORM_EXIT -ne 0 ] || [ ! -s "$NORM_PASS_VCF" ]; then
+                echo "❌ [FATAL] bcftools norm failed (exit code $NORM_EXIT). Check $output_dir/qc/bcftools_norm.log"
+                echo '{"normalizedWithBcftools": false, "error": "bcftools norm failed"}' > "$output_dir/qc/norm_status.json"
+                exit 2
+            fi
+
+            # Check for reference build mismatch (REF_MISMATCH rate)
+            MISMATCH_COUNT=$(grep -c "^REF_MISMATCH" "$output_dir/qc/bcftools_norm.log" 2>/dev/null || echo 0)
+            TOTAL_CHECKED=$(grep "total/split" "$output_dir/qc/bcftools_norm.log" 2>/dev/null | sed -E 's/.*:[[:space:]]*([0-9]+).*/\1/' || echo "$PASS_COUNT")
+            [ -z "$TOTAL_CHECKED" ] || [ "$TOTAL_CHECKED" -eq 0 ] && TOTAL_CHECKED=1
+            
+            MISMATCH_PCT=$(awk -v m="$MISMATCH_COUNT" -v t="$TOTAL_CHECKED" 'BEGIN { printf "%.2f", (m / t) * 100 }')
+            echo "  [QC] Build mismatch audit: $MISMATCH_COUNT / $TOTAL_CHECKED variants discordant ($MISMATCH_PCT%)"
+
+            if awk -v p="$MISMATCH_PCT" 'BEGIN { exit (p >= 2.0 ? 0 : 1) }'; then
+                echo "🛑 [FATAL BUILD MISMATCH] Detected $MISMATCH_COUNT reference allele mismatches ($MISMATCH_PCT% >= 2.0%)."
+                echo "   The input callset does not match the reference genome ($REF_BUILD). Pipeline halted."
+                echo "{\"normalizedWithBcftools\": true, \"buildMismatchHalt\": true, \"mismatchCount\": $MISMATCH_COUNT, \"mismatchPct\": $MISMATCH_PCT}" > "$output_dir/qc/norm_status.json"
+                exit 2
+            fi
+
+            echo "{\"normalizedWithBcftools\": true, \"buildMismatchHalt\": false, \"mismatchCount\": $MISMATCH_COUNT, \"mismatchPct\": $MISMATCH_PCT}" > "$output_dir/qc/norm_status.json"
+            mv "$NORM_PASS_VCF" "$PASS_VCF"
+            PASS_COUNT=$((grep -v "^#" "$PASS_VCF" 2>/dev/null || true) | wc -l | tr -d ' ')
+            echo "✅ PASS variants normalized, left-aligned, and build-verified: $PASS_COUNT records"
+        else
+            echo "⚠️  bcftools not found or PASS_VCF empty - skipping normalization"
+            mkdir -p "$output_dir/qc"
+            echo '{"normalizedWithBcftools": false, "reason": "bcftools_not_found_or_empty"}' > "$output_dir/qc/norm_status.json"
+        fi
+
         # Compute Runs of Homozygosity (F_ROH) for Consanguinity / Inbreeding assessment
         mkdir -p "$output_dir/qc"
         FROH_JSON="$output_dir/qc/froh.json"
@@ -988,134 +1031,74 @@ analyze_sample() {
                 > $output_dir/annovar/snpeff/${sample_name}_final_annotated.vcf
             
             if [ -s "$output_dir/annovar/snpeff/${sample_name}_final_annotated.vcf" ]; then
-                mv $output_dir/annovar/snpeff/${sample_name}_final_annotated.vcf $output_dir/annovar/snpeff/${sample_name}_snpEff_annotated.vcf
+                mv "$output_dir/annovar/snpeff/${sample_name}_final_annotated.vcf" "$output_dir/annovar/snpeff/${sample_name}_snpEff_annotated.vcf"
                 echo "✅ SnpSift global frequency annotation complete"
             else
-                rm -f $output_dir/annovar/snpeff/${sample_name}_final_annotated.vcf
+                rm -f "$output_dir/annovar/snpeff/${sample_name}_final_annotated.vcf"
                 echo "⚠️  SnpSift output empty, keeping snpEff VCF"
+            fi
+        fi
+
+        # 11c. SnpSift ClinVar clinical significance annotation (CLNSIG, CLNREVSTAT, CLNDN, CLNDISDB, CLNVC)
+        if [ -f "$SNPEFF_DIR/SnpSift.jar" ] && [ -f "$KNOWN_CLINVAR" ]; then
+            echo "  [EXECUTION AGENT] Annotating ClinVar clinical significance (CLNSIG, CLNREVSTAT, CLNDN, CLNDISDB, CLNVC)..."
+            java -jar "$SNPEFF_DIR/SnpSift.jar" annotate \
+                -tabix \
+                -info CLNSIG,CLNREVSTAT,CLNDN,CLNDISDB,CLNVC \
+                "$KNOWN_CLINVAR" \
+                "$output_dir/annovar/snpeff/${sample_name}_snpEff_annotated.vcf" \
+                > "$output_dir/annovar/snpeff/${sample_name}_clinvar_annotated.vcf"
+            
+            if [ -s "$output_dir/annovar/snpeff/${sample_name}_clinvar_annotated.vcf" ]; then
+                mv "$output_dir/annovar/snpeff/${sample_name}_clinvar_annotated.vcf" "$output_dir/annovar/snpeff/${sample_name}_snpEff_annotated.vcf"
+                echo "✅ SnpSift ClinVar clinical annotation complete"
+            else
+                rm -f "$output_dir/annovar/snpeff/${sample_name}_clinvar_annotated.vcf"
+                echo "⚠️  SnpSift ClinVar output empty, keeping current VCF"
             fi
         fi
     else
         echo "⚠️  snpEff not found - skipping"
     fi
     
-    # 12. Add Zygosity Information
-    step 13 "Adding Zygosity Information"
+    # 12. Generate Annotation Tables & Functional Classifications
+    step 13 "Generating Annotation Tables & Classifications"
     
-    ANNOT_TXT=$output_dir/annovar/annotated_${sample_name}.hg19_multianno.txt
-    ANNOT_WITH_ZYG=$output_dir/annovar/annotated_${sample_name}_with_zygosity.txt
-    
-    if [ -f "$ANNOT_TXT" ] && [ -f "$PASS_VCF" ]; then
-        cat > /tmp/add_zygosity_${sample_name}.py << 'PYTHON_SCRIPT'
-import sys
-
-if len(sys.argv) != 4:
-    print("Usage: script.py vcf_file annot_file output_file")
-    sys.exit(1)
-
-vcf_file = sys.argv[1]
-annot_file = sys.argv[2]
-output_file = sys.argv[3]
-
-# Extract GT from VCF
-gt_dict = {}
-with open(vcf_file, 'r') as f:
-    for line in f:
-        if line.startswith('#'):
-            continue
-        parts = line.strip().split('\t')
-        if len(parts) > 9:
-            chrom, pos, _, ref, alt = parts[0], parts[1], parts[2], parts[3], parts[4]
-            format_field = parts[8].split(':')
-            sample_field = parts[9].split(':')
-            
-            if 'GT' in format_field:
-                gt_index = format_field.index('GT')
-                if gt_index < len(sample_field):
-                    genotype = sample_field[gt_index]
-                    
-                    if genotype in ['0/1', '1/0']:
-                        zygosity = "Heterozygous"
-                    elif genotype == '1/1':
-                        zygosity = "Homozygous"
-                    elif genotype == '0/0':
-                        zygosity = "Reference"
-                    else:
-                        zygosity = "Unknown"
-                    
-                    key = f"{chrom}:{pos}:{ref}:{alt}"
-                    gt_dict[key] = zygosity
-
-# Add zygosity column
-with open(annot_file, 'r') as f_in, open(output_file, 'w') as f_out:
-    header = f_in.readline()
-    f_out.write(header.strip() + "\tZygosity\n")
-    
-    for line in f_in:
-        parts = line.strip().split('\t')
-        if len(parts) >= 5:
-            chrom, start, _, ref, alt = parts[0], parts[1], parts[2], parts[3], parts[4]
-            key = f"{chrom}:{start}:{ref}:{alt}"
-            zygosity = gt_dict.get(key, "Unknown")
-            f_out.write(line.strip() + "\t" + zygosity + "\n")
-
-print("✅ Zygosity column added")
-PYTHON_SCRIPT
-        
-        python3 /tmp/add_zygosity_${sample_name}.py "$PASS_VCF" "$ANNOT_TXT" "$ANNOT_WITH_ZYG"
-        rm -f /tmp/add_zygosity_${sample_name}.py
+    ANNOTATED_VCF="$output_dir/annovar/snpeff/${sample_name}_snpEff_annotated.vcf"
+    if [ -f "$ANNOTATED_VCF" ]; then
+        echo "  [EXECUTION AGENT] Generating zygosity, variant type separation & functional classifications..."
+        python3 "$SCRIPT_DIR/scripts/generate_annotation_table.py" \
+            "$ANNOTATED_VCF" \
+            "$output_dir" \
+            "$sample_name"
+    else
+        echo "⚠️ Annotated VCF not found - skipping table generation"
     fi
-    
-    # 13. Advanced Functional Separation
-    step 14 "Advanced Functional Separation"
-    
-    FUNC_DIR=$output_dir/annovar/functional_classification
-    mkdir -p $FUNC_DIR
-    
-    INPUT_FILE=$ANNOT_WITH_ZYG
-    if [ ! -f "$INPUT_FILE" ]; then
-        INPUT_FILE=$ANNOT_TXT
+
+    # 13. Stage 7 Variant Functional Annotation & Integrity Supervisor Gate
+    step 14 "Stage 7 Supervisor Quality Gate"
+    echo "  [SUPERVISOR] Evaluating Stage 7 Annotation Integrity & Clinical Grounding (qc.json)..."
+    set +e
+    node "$SCRIPT_DIR/scripts/stage7_annotation_gate.js" "$output_dir" "$sample_name" "$REFERENCE"
+    S7_EXIT=$?
+    set -e
+
+    if [ $S7_EXIT -ne 0 ]; then
+        if [ $S7_EXIT -eq 1 ]; then
+            echo ""
+            echo "🛑 [PIPELINE HALTED] Stage 7 Annotation Gate failed clinical rejection floor."
+            echo "   Human-in-the-Loop Operator Opinion Gate is required."
+            echo "   Use the Web Dashboard to review anomalies or run: touch \"$output_dir/.override_annotation_gate\"."
+            exit 1
+        elif [ $S7_EXIT -eq 2 ]; then
+            echo "❌ [FATAL] Tool crash or reference build mismatch during annotation. Pipeline halted."
+            exit 2
+        else
+            echo "❌ [ERROR] Unknown Stage 7 gate error ($S7_EXIT)."
+            exit 1
+        fi
     fi
-    
-    if [ -f "$INPUT_FILE" ]; then
-        HEADER=$(head -1 $INPUT_FILE)
-        
-        # SNPs - Exonic
-        echo "$HEADER" > $FUNC_DIR/SNPs_Exonic.txt
-        tail -n +2 $INPUT_FILE | awk -F'\t' 'length($4)==1 && length($5)==1 && $6=="exonic"' >> $FUNC_DIR/SNPs_Exonic.txt
-        
-        # SNPs - Non-Exonic
-        echo "$HEADER" > $FUNC_DIR/SNPs_NonExonic.txt
-        tail -n +2 $INPUT_FILE | awk -F'\t' 'length($4)==1 && length($5)==1 && $6!="exonic"' >> $FUNC_DIR/SNPs_NonExonic.txt
-        
-        # Exonic - Nonsynonymous
-        echo "$HEADER" > $FUNC_DIR/Exonic_Nonsynonymous.txt
-        tail -n +2 $INPUT_FILE | awk -F'\t' '$6=="exonic" && $9 ~ /nonsynonymous/' >> $FUNC_DIR/Exonic_Nonsynonymous.txt
-        
-        # Exonic - Synonymous
-        echo "$HEADER" > $FUNC_DIR/Exonic_Synonymous.txt
-        tail -n +2 $INPUT_FILE | awk -F'\t' '$6=="exonic" && $9 ~ /synonymous/' >> $FUNC_DIR/Exonic_Synonymous.txt
-        
-        # Exonic - Stopgain
-        echo "$HEADER" > $FUNC_DIR/Exonic_Stopgain.txt
-        tail -n +2 $INPUT_FILE | awk -F'\t' '$6=="exonic" && $9 ~ /stopgain/' >> $FUNC_DIR/Exonic_Stopgain.txt
-        
-        # Exonic - Frameshift
-        echo "$HEADER" > $FUNC_DIR/Exonic_Frameshift.txt
-        tail -n +2 $INPUT_FILE | awk -F'\t' '$6=="exonic" && $9 ~ /frameshift/' >> $FUNC_DIR/Exonic_Frameshift.txt
-        
-        SNP_EXONIC=$(($(wc -l < $FUNC_DIR/SNPs_Exonic.txt) - 1))
-        SNP_NONEXONIC=$(($(wc -l < $FUNC_DIR/SNPs_NonExonic.txt) - 1))
-        NONSYN=$(($(wc -l < $FUNC_DIR/Exonic_Nonsynonymous.txt) - 1))
-        SYN=$(($(wc -l < $FUNC_DIR/Exonic_Synonymous.txt) - 1))
-        STOP=$(($(wc -l < $FUNC_DIR/Exonic_Stopgain.txt) - 1))
-        FRAME=$(($(wc -l < $FUNC_DIR/Exonic_Frameshift.txt) - 1))
-        
-        echo "✅ Functional classification:"
-        echo "   SNPs Exonic: $SNP_EXONIC | Non-Exonic: $SNP_NONEXONIC"
-        echo "   Nonsynonymous: $NONSYN | Synonymous: $SYN"
-        echo "   Stopgain: $STOP | Frameshift: $FRAME"
-    fi
+    echo "✅ Stage 7 Variant Functional Annotation & Integrity Approved by Supervisor."
     
     echo ""
     echo "✅ Sample $sample_name: COMPLETE!"
