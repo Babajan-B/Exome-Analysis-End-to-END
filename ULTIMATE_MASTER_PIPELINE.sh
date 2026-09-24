@@ -831,18 +831,24 @@ analyze_sample() {
                         const lines = fs.readFileSync(rohPath, "utf8").split("\n");
                         let totalRohLength = 0;
                         let rohBlockCount = 0;
+                        const MIN_ROH_BLOCK_LEN = 1000000; // 1 Mb threshold (standard genomic F_ROH convention)
                         for (const line of lines) {
                             if (!line || line.startsWith("#")) continue;
                             const parts = line.split("\t");
                             if (parts[0] === "RG") {
+                                // parts[2]: chromosome (e.g. chr1, chr2, ..., chrX, 1, 2, ..., X)
+                                const chrom = (parts[2] || "").replace(/^chr/i, "");
+                                const isAutosome = /^[1-9]$|^1[0-9]$|^2[0-2]$/.test(chrom);
+                                if (!isAutosome) continue; // Autosomes only: exclude chrX, chrY, chrM
+
                                 const len = parseInt(parts[5], 10) || (parseInt(parts[4], 10) - parseInt(parts[3], 10));
-                                if (len > 0) {
+                                if (len >= MIN_ROH_BLOCK_LEN) {
                                     totalRohLength += len;
                                     rohBlockCount++;
                                 }
                             }
                         }
-                        const AUTOSOMAL_GENOME_SIZE = 2880000000;
+                        const AUTOSOMAL_GENOME_SIZE = 2880000000; // ~2.88 Gb
                         const froh = parseFloat((totalRohLength / AUTOSOMAL_GENOME_SIZE).toFixed(4));
                         const frohConfirmed = froh >= 0.05;
                         const payload = {
@@ -850,11 +856,12 @@ analyze_sample() {
                             frohConfirmed,
                             totalRohLength,
                             rohBlockCount,
+                            minBlockLenThreshold: MIN_ROH_BLOCK_LEN,
                             autosomalGenomeSize: AUTOSOMAL_GENOME_SIZE,
                             timestamp: new Date().toISOString()
                         };
                         fs.writeFileSync(outPath, JSON.stringify(payload, null, 2));
-                        console.log(`  [QC] Estimated F_ROH: ${froh} (${(totalRohLength / 1e6).toFixed(1)} Mb in ${rohBlockCount} ROH blocks, confirmed: ${frohConfirmed})`);
+                        console.log(`  [QC] Estimated F_ROH: ${froh} (${(totalRohLength / 1e6).toFixed(1)} Mb across ${rohBlockCount} autosomal blocks >= 1Mb, confirmed: ${frohConfirmed})`);
                     } catch (e) {
                         fs.writeFileSync(outPath, JSON.stringify({ froh: 0, frohConfirmed: false, error: e.message }, null, 2));
                     }
